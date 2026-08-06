@@ -115,12 +115,13 @@ export default function ForgotPasswordPage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem" }}>
           <img
-            src="/nidhitrack-logo.svg"
+            src="/nidhitrack-logo.png"
             alt="NidhiTrack Logo"
             style={{
               width: "38px",
               height: "38px",
               objectFit: "contain",
+              borderRadius: "6px",
               flexShrink: 0,
             }}
           />

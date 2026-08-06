@@ -43,12 +43,13 @@ export default function LandingPage() {
           }}
         >
           <img
-            src="/nidhitrack-logo.svg"
+            src="/nidhitrack-logo.png"
             alt="NidhiTrack Logo"
             style={{
               width: "38px",
               height: "38px",
               objectFit: "contain",
+              borderRadius: "6px",
               flexShrink: 0,
             }}
           />

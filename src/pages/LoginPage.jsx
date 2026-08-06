@@ -207,12 +207,13 @@ export default function LoginPage() {
             {/* Logo */}
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "2rem" }}>
               <img
-                src="/nidhitrack-logo.svg"
+                src="/nidhitrack-logo.png"
                 alt="NidhiTrack Logo"
                 style={{
                   width: "40px",
                   height: "40px",
                   objectFit: "contain",
+                  borderRadius: "6px",
                   flexShrink: 0,
                 }}
               />

@@ -42,12 +42,13 @@ function SidebarContent({ onNavigate, onToggleSidebar, sidebarHidden }) {
       {/* Logo Header */}
       <div className="logo" style={{ display: "flex", alignItems: "center", gap: "0.625rem", width: "100%" }}>
         <img
-          src="/nidhitrack-logo.svg"
+          src="/nidhitrack-logo.png"
           alt="NidhiTrack"
           style={{
             width: "36px",
             height: "36px",
             objectFit: "contain",
+            borderRadius: "6px",
             flexShrink: 0,
           }}
         />
