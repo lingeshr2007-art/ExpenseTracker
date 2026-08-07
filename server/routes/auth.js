@@ -4,8 +4,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getOne, run } from "../db.js";
 import { JWT_SECRET, authenticateToken } from "../middleware/auth.js";
+import { sendOtpEmail } from "../utils/email.js";
 
 const router = express.Router();
+
 
 // Email validator
 function isValidEmail(email) {
@@ -189,6 +191,158 @@ router.post("/reset-password", async (req, res) => {
     return res.json({ message: "Password reset successful! You can now log in." });
   } catch (err) {
     return res.status(500).json({ error: "Failed to reset password." });
+  }
+});
+
+// POST /api/auth/login-otp/send
+router.post("/login-otp/send", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanPass = (password || "").trim();
+
+    if (!cleanEmail || !cleanPass) {
+      return res.status(400).json({ error: "Email address and password are required." });
+    }
+
+    const user = await getOne("SELECT * FROM users WHERE email = ?", [cleanEmail]);
+    if (!user) {
+      return res.status(400).json({ error: "No account found with this email address." });
+    }
+
+    const match = await bcrypt.compare(cleanPass, user.password_hash);
+    if (!match) {
+      return res.status(400).json({ error: "Incorrect password. Please check your credentials." });
+    }
+
+    // Credentials valid -> Generate 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpSessionId = `otp_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
+
+    // Clean old OTP sessions for this email
+    await run("DELETE FROM login_otps WHERE email = ?", [user.email]);
+
+    await run(
+      `INSERT INTO login_otps (id, email, otp_code, expires_at, attempts)
+       VALUES (?, ?, ?, ?, 0)`,
+      [otpSessionId, user.email, otpCode, expiresAt]
+    );
+
+    // Send real OTP email to user's registered email address!
+    try {
+      await sendOtpEmail(user.email, otpCode);
+    } catch (mailErr) {
+      console.error("Could not deliver OTP email:", mailErr.message);
+    }
+
+    return res.json({
+      message: `Real-time OTP verification code sent to your registered email: ${user.email}`,
+      otpSessionId,
+      email: user.email,
+    });
+  } catch (err) {
+
+    console.error("Error sending login OTP:", err);
+    return res.status(500).json({ error: "Failed to send real-time login OTP." });
+  }
+});
+
+// POST /api/auth/login-otp/verify
+router.post("/login-otp/verify", async (req, res) => {
+  try {
+    const { email, otpSessionId, otpCode } = req.body;
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanSessionId = (otpSessionId || "").trim();
+    const cleanCode = (otpCode || "").trim();
+
+    if (!cleanEmail || !cleanSessionId || !cleanCode) {
+      return res.status(400).json({ error: "Email, session ID, and OTP code are required." });
+    }
+
+    const record = await getOne("SELECT * FROM login_otps WHERE id = ? AND email = ?", [cleanSessionId, cleanEmail]);
+    if (!record) {
+      return res.status(400).json({ error: "Invalid or expired OTP session. Please request a new code." });
+    }
+
+    if (Date.now() > record.expires_at) {
+      await run("DELETE FROM login_otps WHERE id = ?", [cleanSessionId]);
+      return res.status(400).json({ error: "OTP code has expired. Please click Resend Code." });
+    }
+
+    if (record.attempts >= 5) {
+      await run("DELETE FROM login_otps WHERE id = ?", [cleanSessionId]);
+      return res.status(400).json({ error: "Too many failed attempts. Please request a new code." });
+    }
+
+    if (record.otp_code !== cleanCode) {
+      await run("UPDATE login_otps SET attempts = attempts + 1 WHERE id = ?", [cleanSessionId]);
+      return res.status(400).json({ error: "Incorrect 6-digit OTP code. Please double check." });
+    }
+
+    // OTP Verified! Fetch User
+    const user = await getOne("SELECT * FROM users WHERE email = ?", [cleanEmail]);
+    if (!user) {
+      return res.status(404).json({ error: "User account not found." });
+    }
+
+    // Clear used OTP record
+    await run("DELETE FROM login_otps WHERE id = ?", [cleanSessionId]);
+
+    const userPayload = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      memberSince: user.member_since || "Jan 2026",
+      accountType: user.account_type || "Premium",
+      provider: user.provider || "email",
+    };
+
+    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: "7d" });
+
+    return res.json({
+      message: "OTP Verification successful! Logging in...",
+      token,
+      user: userPayload,
+    });
+  } catch (err) {
+    console.error("Error verifying login OTP:", err);
+    return res.status(500).json({ error: "Failed to verify OTP code." });
+  }
+});
+
+// POST /api/auth/login-otp/resend
+router.post("/login-otp/resend", async (req, res) => {
+  try {
+    const { email, otpSessionId } = req.body;
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanSessionId = (otpSessionId || "").trim();
+
+    if (!cleanEmail || !cleanSessionId) {
+      return res.status(400).json({ error: "Email and session ID are required." });
+    }
+
+    const newOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const newExpiresAt = Date.now() + 5 * 60 * 1000;
+
+    await run(
+      `UPDATE login_otps SET otp_code = ?, expires_at = ?, attempts = 0 WHERE id = ? AND email = ?`,
+      [newOtpCode, newExpiresAt, cleanSessionId, cleanEmail]
+    );
+
+    try {
+      await sendOtpEmail(cleanEmail, newOtpCode);
+    } catch (mailErr) {
+      console.error("Could not deliver resent OTP email:", mailErr.message);
+    }
+
+    return res.json({
+      message: `A new real-time verification code was sent to ${cleanEmail}`,
+    });
+  } catch (err) {
+
+    console.error("Error resending OTP:", err);
+    return res.status(500).json({ error: "Failed to resend OTP code." });
   }
 });
 

@@ -147,6 +147,18 @@ export async function initDb() {
           )
         `);
 
+        // Login OTPs Table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS login_otps (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            otp_code TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
         // Seed Default Admin User if not exists
         const defaultEmail = "suresh@myfinpal.com";
         db.get("SELECT id FROM users WHERE email = ?", [defaultEmail], async (err, row) => {

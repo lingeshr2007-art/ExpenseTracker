@@ -14,7 +14,10 @@ import BudgetPage from "./pages/Budget.jsx";
 import FriendsDebtsView from "./components/FriendsDebtsView.jsx";
 import SavingsPage from "./pages/SavingsPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
+import VerifyOtpPage from "./pages/VerifyOtpPage.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import { Toaster } from "react-hot-toast";
+
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -120,13 +123,16 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   return (
     <ErrorBoundary>
+      <Toaster position="top-right" reverseOrder={false} />
       <BrowserRouter>
         <Routes>
           {/* Public Standalone Auth Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/verify-otp" element={<VerifyOtpPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
 
           {/* Protected Authenticated Dashboard Shell Layout Routes */}
           <Route

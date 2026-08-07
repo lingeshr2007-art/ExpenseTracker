@@ -3,21 +3,18 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
-  User,
-  Lock,
-  Eye,
-  EyeOff,
-  CheckCircle2,
-  AlertCircle,
+  Mail,
   ArrowRight,
   ShieldCheck,
   TrendingUp,
   Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Lock,
 } from "lucide-react";
-import useStore from "../store/useStore";
-import { useApp } from "../context/AppContext";
-import { authService } from "../services/authService";
-import GoogleAuthModal from "../components/GoogleAuthModal";
+import toast from "react-hot-toast";
+import { useAuth } from "../context/AuthContext.jsx";
+import GoogleAuthModal from "../components/GoogleAuthModal.jsx";
 
 const FEATURE_SLIDES = [
   {
@@ -49,29 +46,35 @@ const FEATURE_SLIDES = [
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const showToast = useStore((state) => (state.toast ? state.showToast : null));
-  const appContext = useApp();
+  const { sendOtp, isAuthenticated } = useAuth();
 
-  const registeredUsername = location.state?.registeredUsername || location.state?.registeredEmail || "";
-  const justRegistered = location.state?.justRegistered || false;
+  const registeredEmail = location.state?.registeredEmail || location.state?.email || "";
 
-  // Form State - empty by default, with clear example placeholders
-  const [username, setUsername] = useState(registeredUsername || "");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-  const [isCapsLock, setIsCapsLock] = useState(false);
-
-  // Status & Error Alert State
+  // Email State & Validation
+  const [email, setEmail] = useState(registeredEmail || "");
+  const [isTouched, setIsTouched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
   const [authError, setAuthError] = useState("");
   const [activeSlide, setActiveSlide] = useState(0);
 
   // Google OAuth Modal state
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
 
-  // Auto-rotate feature slides every 5 seconds
+  // Email Regex Validator
+  const isValidEmail = (emailStr) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(emailStr).trim().toLowerCase());
+  };
+
+  const isEmailValid = isValidEmail(email);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/dashboard");
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Auto-rotate feature slides
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % FEATURE_SLIDES.length);
@@ -79,80 +82,46 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Redirect to landing page ('/') when user clicks browser Back button on /login page
-  useEffect(() => {
-    const handlePopState = () => {
-      navigate("/", { replace: true });
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, [navigate]);
-
-  // Keyboard Event: Check Caps Lock Status
-  const handleKeyDown = (e) => {
-    if (e.getModifierState) {
-      setIsCapsLock(e.getModifierState("CapsLock"));
-    }
-  };
-
-  // Form Submit Handler
+  // Form Submit Handler: Call /api/auth/send-otp and redirect to /verify-otp
   const handleSubmit = async (e) => {
     e.preventDefault();
     setAuthError("");
 
-    if (!username.trim()) {
-      setAuthError("Please enter your username.");
-      return;
-    }
-    if (!password.trim()) {
-      setAuthError("Please enter your password.");
+    if (!isEmailValid) {
+      setAuthError("Please enter a valid email address.");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const res = await authService.login(username, password);
+      const cleanEmail = email.trim().toLowerCase();
+      const res = await sendOtp(cleanEmail);
       setIsLoading(false);
-      setIsSuccess(true);
+      
+      toast.success(res.message || `OTP sent to ${cleanEmail}`);
 
-      if (appContext && typeof appContext.login === "function") {
-        appContext.login(res.user.name, res.user.email);
-      }
-
-      if (showToast) showToast(`Welcome back, ${res.user.name}! 👋`);
-
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 700);
+      // Redirect to /verify-otp with email in location state
+      navigate("/verify-otp", { state: { email: cleanEmail } });
     } catch (err) {
       setIsLoading(false);
-      setAuthError(err.message || "Invalid credentials. Please try again.");
+      const errMsg = err.response?.data?.error || err.message || "Failed to send OTP. Please try again.";
+      setAuthError(errMsg);
+      toast.error(errMsg);
     }
   };
 
-  // Google Authentication Success Handler
+  // Google Auth Success Handler
   const handleGoogleSuccess = async (googleUser) => {
     setIsLoading(true);
-    authService
-      .googleAuth(googleUser.email, googleUser.name, googleUser.picture)
-      .then((res) => {
-        setIsLoading(false);
-        setIsSuccess(true);
-
-        if (appContext && typeof appContext.login === "function") {
-          appContext.login(res.user.name, res.user.email);
-        }
-
-        if (showToast) showToast(`Signed in with Google as ${res.user.name} ✓`);
-
-        setTimeout(() => {
-          navigate("/dashboard");
-        }, 700);
-      });
+    try {
+      const res = await sendOtp(googleUser.email);
+      setIsLoading(false);
+      navigate("/verify-otp", { state: { email: googleUser.email } });
+    } catch (err) {
+      setIsLoading(false);
+      toast.error("Google authentication failed.");
+    }
   };
 
   return (
@@ -172,7 +141,6 @@ export default function LoginPage() {
         boxSizing: "border-box",
       }}
     >
-      {/* Main Centered Minimal Light Container */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
@@ -193,7 +161,7 @@ export default function LoginPage() {
           overflow: "hidden",
         }}
       >
-        {/* ── LEFT SIDE: Form Section ── */}
+        {/* ── LEFT SIDE: Passwordless OTP Login Form ── */}
         <div
           style={{
             display: "flex",
@@ -208,12 +176,12 @@ export default function LoginPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "2rem" }}>
               <img
                 src="/nidhitrack-logo.png"
-                alt="NidhiTrack Logo"
+                alt="Nidhi Track Logo"
                 style={{
                   width: "40px",
                   height: "40px",
                   objectFit: "contain",
-                  borderRadius: "6px",
+                  borderRadius: "8px",
                   flexShrink: 0,
                 }}
               />
@@ -226,12 +194,12 @@ export default function LoginPage() {
                   letterSpacing: "-0.02em",
                 }}
               >
-                NidhiTrack
+                Nidhi Track
               </span>
             </div>
 
             {/* Header */}
-            <div style={{ marginBottom: "1.5rem" }}>
+            <div style={{ marginBottom: "1.75rem" }}>
               <h1
                 style={{
                   fontFamily: "'Space Grotesk', sans-serif",
@@ -244,36 +212,12 @@ export default function LoginPage() {
               >
                 Welcome Back 👋
               </h1>
-              <p style={{ fontSize: "0.875rem", color: "#6B6B72", fontWeight: 500 }}>
-                Sign in to securely manage your finances.
+              <p style={{ fontSize: "0.875rem", color: "#6B6B72", fontWeight: 500, lineHeight: 1.4 }}>
+                Enter your Gmail / Email address to receive a secure 6-digit login OTP code.
               </p>
             </div>
 
-            {/* Inline Registration Success Banner */}
-            {justRegistered && !authError && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{
-                  padding: "0.75rem 1rem",
-                  borderRadius: "12px",
-                  backgroundColor: "#E6F4EA",
-                  border: "1px solid #2E9E6D",
-                  color: "#2E9E6D",
-                  fontSize: "0.825rem",
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  marginBottom: "1.25rem",
-                }}
-              >
-                <CheckCircle2 size={16} />
-                <span>Account created successfully! Please sign in below.</span>
-              </motion.div>
-            )}
-
-            {/* Inline Security Error Alert */}
+            {/* Error Alert */}
             {authError && (
               <motion.div
                 initial={{ opacity: 0, y: -8 }}
@@ -297,59 +241,8 @@ export default function LoginPage() {
               </motion.div>
             )}
 
-            {/* Form */}
+            {/* Passwordless OTP Form */}
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              {/* Username Input */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                <label
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    color: "#1A1A1E",
-                  }}
-                >
-                  Username
-                </label>
-                <div style={{ position: "relative", width: "100%" }}>
-                  <User
-                    size={18}
-                    style={{
-                      position: "absolute",
-                      left: "14px",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: "#6B6B72",
-                      pointerEvents: "none",
-                    }}
-                  />
-                  <input
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="e.g. Lingesh"
-                    style={{
-                      width: "100%",
-                      padding: "0.8rem 1rem 0.8rem 2.65rem",
-                      backgroundColor: "#FAFAFA",
-                      border: "1px solid #E8E8EA",
-                      borderRadius: "12px",
-                      fontSize: "0.875rem",
-                      fontWeight: 600,
-                      color: "#1A1A1E",
-                      outline: "none",
-                      boxSizing: "border-box",
-                      transition: "border-color 0.2s",
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = "#4F5DED")}
-                    onBlur={(e) => (e.target.style.borderColor = "#E8E8EA")}
-                  />
-                </div>
-              </div>
-
-              {/* Password Input */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <label
@@ -361,28 +254,36 @@ export default function LoginPage() {
                       color: "#1A1A1E",
                     }}
                   >
-                    Password
+                    Gmail / Email Address
                   </label>
-                  {isCapsLock && (
+
+                  {/* Real-time Email Validation Status Badge */}
+                  {isTouched && email && (
                     <span
                       style={{
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        color: isEmailValid ? "#2E9E6D" : "#D65A5A",
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "4px",
-                        fontSize: "0.65rem",
-                        fontWeight: 800,
-                        color: "#D9A441",
-                        backgroundColor: "#FFFBEB",
-                        padding: "2px 6px",
-                        borderRadius: "4px",
+                        gap: "3px",
                       }}
                     >
-                      <AlertCircle size={11} /> CAPS LOCK ON
+                      {isEmailValid ? (
+                        <>
+                          <CheckCircle2 size={12} /> Valid Email
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle size={12} /> Enter valid email
+                        </>
+                      )}
                     </span>
                   )}
                 </div>
+
                 <div style={{ position: "relative", width: "100%" }}>
-                  <Lock
+                  <Mail
                     size={18}
                     style={{
                       position: "absolute",
@@ -394,19 +295,23 @@ export default function LoginPage() {
                     }}
                   />
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type="email"
                     required
-                    value={password}
-                    onKeyDown={handleKeyDown}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="e.g. Ling@123"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (!isTouched) setIsTouched(true);
+                      setAuthError("");
+                    }}
+                    onBlur={() => setIsTouched(true)}
+                    placeholder="e.g. suresh@gmail.com"
                     style={{
                       width: "100%",
-                      padding: "0.8rem 2.65rem 0.8rem 2.65rem",
+                      padding: "0.85rem 1rem 0.85rem 2.65rem",
                       backgroundColor: "#FAFAFA",
-                      border: "1px solid #E8E8EA",
+                      border: isTouched && email && !isEmailValid ? "1px solid #D65A5A" : "1px solid #E8E8EA",
                       borderRadius: "12px",
-                      fontSize: "0.875rem",
+                      fontSize: "0.9rem",
                       fontWeight: 600,
                       color: "#1A1A1E",
                       outline: "none",
@@ -414,77 +319,31 @@ export default function LoginPage() {
                       transition: "border-color 0.2s",
                     }}
                     onFocus={(e) => (e.target.style.borderColor = "#4F5DED")}
-                    onBlur={(e) => (e.target.style.borderColor = "#E8E8EA")}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: "absolute",
-                      right: "14px",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "transparent",
-                      border: "none",
-                      color: "#6B6B72",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
                 </div>
               </div>
 
-              {/* Remember Me & Forgot Password */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  fontSize: "0.8125rem",
-                }}
-              >
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", color: "#6B6B72", fontWeight: 500 }}>
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    style={{ width: "16px", height: "16px", accentColor: "#4F5DED", cursor: "pointer" }}
-                  />
-                  <span>Remember me</span>
-                </label>
-
-                <Link
-                  to="/forgot-password"
-                  style={{ fontWeight: 600, color: "#4F5DED", textDecoration: "none" }}
-                >
-                  Forgot Password?
-                </Link>
-              </div>
-
-              {/* Sign In Button */}
+              {/* Send OTP Button (Disabled until email is valid) */}
               <button
                 type="submit"
-                disabled={isLoading || isSuccess}
+                disabled={!isEmailValid || isLoading}
                 style={{
                   width: "100%",
                   padding: "0.875rem",
-                  background: "#4F5DED",
+                  background: isEmailValid ? "#4F5DED" : "#A5B4FC",
                   color: "#FFFFFF",
                   fontFamily: "'Space Grotesk', sans-serif",
                   fontSize: "0.9375rem",
                   fontWeight: 700,
                   borderRadius: "12px",
                   border: "none",
-                  boxShadow: "0 6px 16px rgba(79, 93, 237, 0.25)",
-                  cursor: "pointer",
+                  boxShadow: isEmailValid ? "0 6px 16px rgba(79, 93, 237, 0.25)" : "none",
+                  cursor: isEmailValid && !isLoading ? "pointer" : "not-allowed",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: "0.5rem",
-                  transition: "transform 0.15s, opacity 0.15s",
+                  transition: "all 0.2s ease",
                   marginTop: "0.25rem",
                 }}
               >
@@ -494,16 +353,11 @@ export default function LoginPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    <span>Authenticating...</span>
-                  </div>
-                ) : isSuccess ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#FFFFFF" }}>
-                    <CheckCircle2 size={18} />
-                    <span>Signed In Successfully!</span>
+                    <span>Sending Security OTP...</span>
                   </div>
                 ) : (
                   <>
-                    <span>Sign In</span>
+                    <span>Send OTP</span>
                     <ArrowRight size={18} />
                   </>
                 )}
@@ -536,7 +390,7 @@ export default function LoginPage() {
                 </span>
               </div>
 
-              {/* Google Sign In Button */}
+              {/* Google Sign In */}
               <button
                 type="button"
                 onClick={() => setIsGoogleModalOpen(true)}
@@ -568,19 +422,12 @@ export default function LoginPage() {
             </form>
           </div>
 
-          {/* Footer Link */}
           <div style={{ textAlign: "center", fontSize: "0.8125rem", color: "#6B6B72" }}>
-            Don’t have an account?{" "}
-            <Link
-              to="/signup"
-              style={{ fontWeight: 700, color: "#4F5DED", textDecoration: "none" }}
-            >
-              Sign Up
-            </Link>
+            🔒 Passwordless 2FA Security powered by Nidhi Track
           </div>
         </div>
 
-        {/* ── RIGHT SIDE: Showcase Section ── */}
+        {/* ── RIGHT SIDE: Showcase Feature Section ── */}
         <div
           style={{
             backgroundColor: "#F1F1F8",
@@ -594,7 +441,6 @@ export default function LoginPage() {
             minHeight: "480px",
           }}
         >
-          {/* Top Tag & Slide Counter */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span
               style={{
@@ -618,7 +464,6 @@ export default function LoginPage() {
             </span>
           </div>
 
-          {/* Center Interactive Mockup Graphic */}
           <div style={{ margin: "2rem 0", position: "relative" }}>
             <div
               style={{
@@ -663,28 +508,9 @@ export default function LoginPage() {
                   />
                 </svg>
               </div>
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-                {["Food & Dining", "Bills & Utilities", "Investments"].map((tag, idx) => (
-                  <span
-                    key={tag}
-                    style={{
-                      padding: "0.2rem 0.5rem",
-                      borderRadius: "6px",
-                      backgroundColor: idx === 0 ? "#F1F1F8" : "#FAFAFA",
-                      border: "1px solid #E8E8EA",
-                      color: idx === 0 ? "#4F5DED" : "#6B6B72",
-                      fontSize: "0.65rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
             </div>
           </div>
 
-          {/* Slide Description & Indicators */}
           <div>
             <AnimatePresence mode="wait">
               <motion.div
@@ -702,29 +528,10 @@ export default function LoginPage() {
                 </p>
               </motion.div>
             </AnimatePresence>
-
-            <div style={{ display: "flex", gap: "0.4rem" }}>
-              {FEATURE_SLIDES.map((s, idx) => (
-                <button
-                  key={s.id}
-                  onClick={() => setActiveSlide(idx)}
-                  style={{
-                    height: "4px",
-                    width: activeSlide === idx ? "24px" : "8px",
-                    borderRadius: "9999px",
-                    backgroundColor: activeSlide === idx ? "#4F5DED" : "#E8E8EA",
-                    border: "none",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                  }}
-                />
-              ))}
-            </div>
           </div>
         </div>
       </motion.div>
 
-      {/* Google OAuth Modal Component */}
       <GoogleAuthModal
         isOpen={isGoogleModalOpen}
         onClose={() => setIsGoogleModalOpen(false)}

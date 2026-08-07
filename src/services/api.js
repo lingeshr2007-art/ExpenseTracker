@@ -4,8 +4,9 @@
  * Connects frontend to Express/SQLite Backend REST API
  */
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const SESSION_TOKEN_KEY = "myfinpal_session_token";
+
 
 // Helper: Get Auth Headers
 function getHeaders() {
@@ -53,6 +54,9 @@ export const api = {
   // ── Auth ──
   signup: (name, email, password) => request("/auth/signup", { method: "POST", body: JSON.stringify({ name, email, password }) }),
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  sendLoginOtp: (email, password) => request("/auth/login-otp/send", { method: "POST", body: JSON.stringify({ email, password }) }),
+  verifyLoginOtp: (email, otpSessionId, otpCode) => request("/auth/login-otp/verify", { method: "POST", body: JSON.stringify({ email, otpSessionId, otpCode }) }),
+  resendLoginOtp: (email, otpSessionId) => request("/auth/login-otp/resend", { method: "POST", body: JSON.stringify({ email, otpSessionId }) }),
   getProfile: () => request("/auth/me"),
   forgotPassword: (email) => request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
   resetPassword: (email, otpCode, newPassword) => request("/auth/reset-password", { method: "POST", body: JSON.stringify({ email, otpCode, newPassword }) }),
