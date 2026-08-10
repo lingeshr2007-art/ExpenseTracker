@@ -4,13 +4,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   Mail,
+  User,
+  Lock,
+  Eye,
+  EyeOff,
   ArrowRight,
   ShieldCheck,
   TrendingUp,
   Sparkles,
   CheckCircle2,
   AlertCircle,
-  Lock,
+  KeyRound,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -46,13 +50,22 @@ const FEATURE_SLIDES = [
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { sendOtp, isAuthenticated } = useAuth();
+  const { sendOtp, loginWithPassword, loginWithGoogle, isAuthenticated } = useAuth();
 
-  const registeredEmail = location.state?.registeredEmail || location.state?.email || "";
+  const registeredInput =
+    location.state?.registeredEmail ||
+    location.state?.registeredUsername ||
+    location.state?.email ||
+    "";
 
-  // Email State & Validation
-  const [email, setEmail] = useState(registeredEmail || "");
-  const [isTouched, setIsTouched] = useState(false);
+  // Login Mode: "password" (default) or "otp"
+  const [loginMode, setLoginMode] = useState("password");
+
+  // Form Input States
+  const [identifier, setIdentifier] = useState(registeredInput);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [activeSlide, setActiveSlide] = useState(0);
@@ -60,12 +73,10 @@ export default function LoginPage() {
   // Google OAuth Modal state
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
 
-  // Email Regex Validator
-  const isValidEmail = (emailStr) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(emailStr).trim().toLowerCase());
+  // Email Validator Helper
+  const isValidEmail = (str) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str).trim().toLowerCase());
   };
-
-  const isEmailValid = isValidEmail(email);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -82,45 +93,84 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Form Submit Handler: Call /api/auth/send-otp and redirect to /verify-otp
-  const handleSubmit = async (e) => {
+  // Form Submit Handler: Username/Password Login
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     setAuthError("");
 
-    if (!isEmailValid) {
-      setAuthError("Please enter a valid email address.");
+    const cleanId = identifier.trim();
+    const cleanPass = password.trim();
+
+    if (!cleanId) {
+      setAuthError("Please enter your username.");
+      return;
+    }
+    if (!cleanPass) {
+      setAuthError("Please enter your password.");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const cleanEmail = email.trim().toLowerCase();
-      const res = await sendOtp(cleanEmail);
+      await loginWithPassword(cleanId, cleanPass);
       setIsLoading(false);
-      
-      toast.success(res.message || `OTP sent to ${cleanEmail}`);
-
-      // Redirect to /verify-otp with email in location state
-      navigate("/verify-otp", { state: { email: cleanEmail } });
+      toast.success("Welcome back! Signed in successfully 🎉");
+      navigate("/dashboard");
     } catch (err) {
       setIsLoading(false);
-      const errMsg = err.response?.data?.error || err.message || "Failed to send OTP. Please try again.";
+      const errMsg =
+        err.response?.data?.error ||
+        err.message ||
+        "Invalid username or password. Please try again.";
       setAuthError(errMsg);
       toast.error(errMsg);
     }
   };
 
-  // Google Auth Success Handler
-  const handleGoogleSuccess = async (googleUser) => {
+  // Form Submit Handler: Send OTP Flow
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+
+    const cleanEmail = identifier.trim().toLowerCase();
+
+    if (!isValidEmail(cleanEmail)) {
+      setAuthError("Please enter a valid Gmail / Email address for OTP code.");
+      return;
+    }
+
     setIsLoading(true);
+
     try {
-      const res = await sendOtp(googleUser.email);
+      const res = await sendOtp(cleanEmail);
       setIsLoading(false);
-      navigate("/verify-otp", { state: { email: googleUser.email } });
+      toast.success(res.message || `Security OTP sent to ${cleanEmail}`);
+      navigate("/verify-otp", { state: { email: cleanEmail } });
     } catch (err) {
       setIsLoading(false);
-      toast.error("Google authentication failed.");
+      const errMsg =
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to send OTP. Please try again.";
+      setAuthError(errMsg);
+      toast.error(errMsg);
+    }
+  };
+
+  // Google Auth Success Handler (Direct Verified Email Login via Google)
+  const handleGoogleSuccess = async (googleUser) => {
+    setIsGoogleModalOpen(false);
+    setIsLoading(true);
+
+    try {
+      await loginWithGoogle(googleUser.email, googleUser.name);
+      setIsLoading(false);
+      toast.success(`Signed in with Google as ${googleUser.name} ✓ (Email Verified)`);
+      navigate("/dashboard");
+    } catch (err) {
+      setIsLoading(false);
+      toast.error("Google authentication failed. Please try again.");
     }
   };
 
@@ -137,7 +187,7 @@ export default function LoginPage() {
         justifyContent: "center",
         padding: "1.5rem",
         fontFamily: "'Inter', system-ui, sans-serif",
-        overflow: "hidden",
+        overflowY: "auto",
         boxSizing: "border-box",
       }}
     >
@@ -158,22 +208,21 @@ export default function LoginPage() {
           gap: "1.25rem",
           position: "relative",
           zIndex: 10,
-          overflow: "hidden",
         }}
       >
-        {/* ── LEFT SIDE: Passwordless OTP Login Form ── */}
+        {/* ── LEFT SIDE: Login Form (Username & Password / OTP) ── */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
             padding: "2rem 1.75rem",
-            gap: "1.5rem",
+            gap: "1.25rem",
           }}
         >
           <div>
             {/* Logo */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "2rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem" }}>
               <img
                 src="/nidhitrack-logo.png"
                 alt="Nidhi Track Logo"
@@ -199,22 +248,89 @@ export default function LoginPage() {
             </div>
 
             {/* Header */}
-            <div style={{ marginBottom: "1.75rem" }}>
+            <div style={{ marginBottom: "1.25rem" }}>
               <h1
                 style={{
                   fontFamily: "'Space Grotesk', sans-serif",
-                  fontSize: "2rem",
+                  fontSize: "1.85rem",
                   fontWeight: 800,
                   color: "#1A1A1E",
                   lineHeight: 1.25,
-                  marginBottom: "0.5rem",
+                  marginBottom: "0.35rem",
                 }}
               >
                 Welcome Back 👋
               </h1>
-              <p style={{ fontSize: "0.875rem", color: "#6B6B72", fontWeight: 500, lineHeight: 1.4 }}>
-                Enter your Gmail / Email address to receive a secure 6-digit login OTP code.
+              <p style={{ fontSize: "0.85rem", color: "#6B6B72", fontWeight: 500, lineHeight: 1.4 }}>
+                Sign in with your username & password.
               </p>
+            </div>
+
+            {/* Auth Method Toggle Tabs */}
+            <div
+              style={{
+                display: "flex",
+                backgroundColor: "#F4F4F6",
+                borderRadius: "10px",
+                padding: "3px",
+                marginBottom: "1.25rem",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode("password");
+                  setAuthError("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: "0.5rem",
+                  borderRadius: "8px",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  border: "none",
+                  backgroundColor: loginMode === "password" ? "#FFFFFF" : "transparent",
+                  color: loginMode === "password" ? "#1A1A1E" : "#6B6B72",
+                  boxShadow: loginMode === "password" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.4rem",
+                }}
+              >
+                <Lock size={14} />
+                <span>Password Login</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode("otp");
+                  setAuthError("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: "0.5rem",
+                  borderRadius: "8px",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  border: "none",
+                  backgroundColor: loginMode === "otp" ? "#FFFFFF" : "transparent",
+                  color: loginMode === "otp" ? "#1A1A1E" : "#6B6B72",
+                  boxShadow: loginMode === "otp" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.4rem",
+                }}
+              >
+                <KeyRound size={14} />
+                <span>OTP Login</span>
+              </button>
             </div>
 
             {/* Error Alert */}
@@ -241,10 +357,191 @@ export default function LoginPage() {
               </motion.div>
             )}
 
-            {/* Passwordless OTP Form */}
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {/* ── FORM 1: Username & Password Login ── */}
+            {loginMode === "password" && (
+              <form onSubmit={handlePasswordSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                {/* Username / Email Field */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  <label
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: "#1A1A1E",
+                    }}
+                  >
+                    Username
+                  </label>
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <User
+                      size={18}
+                      style={{
+                        position: "absolute",
+                        left: "14px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "#6B6B72",
+                        pointerEvents: "none",
+                      }}
+                    />
+                    <input
+                      type="text"
+                      required
+                      value={identifier}
+                      onChange={(e) => {
+                        setIdentifier(e.target.value);
+                        setAuthError("");
+                      }}
+                      placeholder="e.g. lingesh"
+                      style={{
+                        width: "100%",
+                        padding: "0.85rem 1rem 0.85rem 2.65rem",
+                        backgroundColor: "#FAFAFA",
+                        border: "1px solid #E8E8EA",
+                        borderRadius: "12px",
+                        fontSize: "0.9rem",
+                        fontWeight: 600,
+                        color: "#1A1A1E",
+                        outline: "none",
+                        boxSizing: "border-box",
+                        transition: "border-color 0.2s",
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = "#4F5DED")}
+                    />
+                  </div>
+                </div>
+
+                {/* Password Field */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label
+                      style={{
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "#1A1A1E",
+                      }}
+                    >
+                      Password
+                    </label>
+                    <Link
+                      to="/forgot-password"
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        color: "#4F5DED",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <Lock
+                      size={18}
+                      style={{
+                        position: "absolute",
+                        left: "14px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "#6B6B72",
+                        pointerEvents: "none",
+                      }}
+                    />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setAuthError("");
+                      }}
+                      placeholder="Enter your password"
+                      style={{
+                        width: "100%",
+                        padding: "0.85rem 2.65rem 0.85rem 2.65rem",
+                        backgroundColor: "#FAFAFA",
+                        border: "1px solid #E8E8EA",
+                        borderRadius: "12px",
+                        fontSize: "0.9rem",
+                        fontWeight: 600,
+                        color: "#1A1A1E",
+                        outline: "none",
+                        boxSizing: "border-box",
+                        transition: "border-color 0.2s",
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = "#4F5DED")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "14px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: "#6B6B72",
+                        cursor: "pointer",
+                        padding: 0,
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Sign In Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  style={{
+                    width: "100%",
+                    padding: "0.875rem",
+                    background: "#4F5DED",
+                    color: "#FFFFFF",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: "0.9375rem",
+                    fontWeight: 700,
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: "0 6px 16px rgba(79, 93, 237, 0.25)",
+                    cursor: isLoading ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.5rem",
+                    transition: "all 0.2s ease",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  {isLoading ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <svg className="animate-spin" style={{ width: "18px", height: "18px", color: "white" }} viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>Authenticating...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Sign In</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* ── FORM 2: Passwordless OTP Login ── */}
+            {loginMode === "otp" && (
+              <form onSubmit={handleOtpSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                   <label
                     style={{
                       fontSize: "0.7rem",
@@ -257,173 +554,95 @@ export default function LoginPage() {
                     Gmail / Email Address
                   </label>
 
-                  {/* Real-time Email Validation Status Badge */}
-                  {isTouched && email && (
-                    <span
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <Mail
+                      size={18}
                       style={{
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                        color: isEmailValid ? "#2E9E6D" : "#D65A5A",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "3px",
+                        position: "absolute",
+                        left: "14px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "#6B6B72",
+                        pointerEvents: "none",
                       }}
-                    >
-                      {isEmailValid ? (
-                        <>
-                          <CheckCircle2 size={12} /> Valid Email
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle size={12} /> Enter valid email
-                        </>
-                      )}
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ position: "relative", width: "100%" }}>
-                  <Mail
-                    size={18}
-                    style={{
-                      position: "absolute",
-                      left: "14px",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: "#6B6B72",
-                      pointerEvents: "none",
-                    }}
-                  />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (!isTouched) setIsTouched(true);
-                      setAuthError("");
-                    }}
-                    onBlur={() => setIsTouched(true)}
-                    placeholder="e.g. suresh@gmail.com"
-                    style={{
-                      width: "100%",
-                      padding: "0.85rem 1rem 0.85rem 2.65rem",
-                      backgroundColor: "#FAFAFA",
-                      border: isTouched && email && !isEmailValid ? "1px solid #D65A5A" : "1px solid #E8E8EA",
-                      borderRadius: "12px",
-                      fontSize: "0.9rem",
-                      fontWeight: 600,
-                      color: "#1A1A1E",
-                      outline: "none",
-                      boxSizing: "border-box",
-                      transition: "border-color 0.2s",
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = "#4F5DED")}
-                  />
-                </div>
-              </div>
-
-              {/* Send OTP Button (Disabled until email is valid) */}
-              <button
-                type="submit"
-                disabled={!isEmailValid || isLoading}
-                style={{
-                  width: "100%",
-                  padding: "0.875rem",
-                  background: isEmailValid ? "#4F5DED" : "#A5B4FC",
-                  color: "#FFFFFF",
-                  fontFamily: "'Space Grotesk', sans-serif",
-                  fontSize: "0.9375rem",
-                  fontWeight: 700,
-                  borderRadius: "12px",
-                  border: "none",
-                  boxShadow: isEmailValid ? "0 6px 16px rgba(79, 93, 237, 0.25)" : "none",
-                  cursor: isEmailValid && !isLoading ? "pointer" : "not-allowed",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.5rem",
-                  transition: "all 0.2s ease",
-                  marginTop: "0.25rem",
-                }}
-              >
-                {isLoading ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <svg className="animate-spin" style={{ width: "18px", height: "18px", color: "white" }} viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    <span>Sending Security OTP...</span>
+                    />
+                    <input
+                      type="email"
+                      required
+                      value={identifier}
+                      onChange={(e) => {
+                        setIdentifier(e.target.value);
+                        setAuthError("");
+                      }}
+                      placeholder="e.g. lingesh@gmail.com"
+                      style={{
+                        width: "100%",
+                        padding: "0.85rem 1rem 0.85rem 2.65rem",
+                        backgroundColor: "#FAFAFA",
+                        border: "1px solid #E8E8EA",
+                        borderRadius: "12px",
+                        fontSize: "0.9rem",
+                        fontWeight: 600,
+                        color: "#1A1A1E",
+                        outline: "none",
+                        boxSizing: "border-box",
+                        transition: "border-color 0.2s",
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = "#4F5DED")}
+                    />
                   </div>
-                ) : (
-                  <>
-                    <span>Send OTP</span>
-                    <ArrowRight size={18} />
-                  </>
-                )}
-              </button>
+                </div>
 
-              {/* Divider */}
-              <div
-                style={{
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0.5rem 0",
-                }}
-              >
-                <div style={{ width: "100%", height: "1px", backgroundColor: "#E8E8EA" }} />
-                <span
+                <button
+                  type="submit"
+                  disabled={!isValidEmail(identifier) || isLoading}
                   style={{
-                    position: "absolute",
-                    backgroundColor: "#FFFFFF",
-                    padding: "0 0.75rem",
-                    fontSize: "0.6875rem",
+                    width: "100%",
+                    padding: "0.875rem",
+                    background: isValidEmail(identifier) ? "#4F5DED" : "#A5B4FC",
+                    color: "#FFFFFF",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: "0.9375rem",
                     fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    color: "#6B6B72",
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: isValidEmail(identifier) ? "0 6px 16px rgba(79, 93, 237, 0.25)" : "none",
+                    cursor: isValidEmail(identifier) && !isLoading ? "pointer" : "not-allowed",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.5rem",
+                    transition: "all 0.2s ease",
+                    marginTop: "0.25rem",
                   }}
                 >
-                  Or continue with
-                </span>
-              </div>
+                  {isLoading ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <svg className="animate-spin" style={{ width: "18px", height: "18px", color: "white" }} viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>Sending Security OTP...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Send OTP</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
 
-              {/* Google Sign In */}
-              <button
-                type="button"
-                onClick={() => setIsGoogleModalOpen(true)}
-                style={{
-                  width: "100%",
-                  padding: "0.8rem",
-                  backgroundColor: "#FFFFFF",
-                  border: "1px solid #E8E8EA",
-                  borderRadius: "12px",
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                  color: "#1A1A1E",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.625rem",
-                  cursor: "pointer",
-                  transition: "border-color 0.2s, background-color 0.2s",
-                }}
-              >
-                <svg style={{ width: "18px", height: "18px" }} viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
-            </form>
+
           </div>
 
-          <div style={{ textAlign: "center", fontSize: "0.8125rem", color: "#6B6B72" }}>
-            🔒 Passwordless 2FA Security powered by Nidhi Track
+          {/* Footer Navigation Link */}
+          <div style={{ textAlign: "center", fontSize: "0.85rem", color: "#6B6B72", marginTop: "0.5rem" }}>
+            Don't have an account?{" "}
+            <Link to="/signup" style={{ color: "#4F5DED", fontWeight: 700, textDecoration: "none" }}>
+              Sign Up
+            </Link>
           </div>
         </div>
 
@@ -536,6 +755,7 @@ export default function LoginPage() {
         isOpen={isGoogleModalOpen}
         onClose={() => setIsGoogleModalOpen(false)}
         onSuccess={handleGoogleSuccess}
+        onSelectAccount={handleGoogleSuccess}
       />
     </div>
   );

@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Check, ShieldCheck, User } from "lucide-react";
 
-export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount }) {
+export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSuccess }) {
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
@@ -20,7 +20,10 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount }) {
 
     setTimeout(() => {
       setIsAuthenticating(false);
-      onSelectAccount(account);
+      const callback = onSelectAccount || onSuccess;
+      if (typeof callback === "function") {
+        callback(account);
+      }
     }, 1000);
   };
 

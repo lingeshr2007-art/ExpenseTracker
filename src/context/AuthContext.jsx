@@ -1,6 +1,7 @@
 // src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 import axiosInstance from "../services/axiosInstance.js";
+import { authService } from "../services/authService.js";
 
 const AuthContext = createContext();
 
@@ -48,28 +49,45 @@ export function AuthProvider({ children }) {
 
   // Step 1: Send OTP to Email
   const sendOtp = async (email) => {
-    const res = await axiosInstance.post("/auth/send-otp", { email });
-    return res.data;
+    try {
+      const res = await axiosInstance.post("/auth/send-otp", { email });
+      return res.data;
+    } catch (err) {
+      return await authService.sendOtp(email);
+    }
   };
 
   // Step 2: Verify OTP
   const verifyOtp = async (email, otp) => {
-    const res = await axiosInstance.post("/auth/verify-otp", { email, otp });
-    const { token: jwtToken, user: userObj } = res.data;
+    try {
+      const res = await axiosInstance.post("/auth/verify-otp", { email, otp });
+      const { token: jwtToken, user: userObj } = res.data;
 
-    if (jwtToken && userObj) {
-      setToken(jwtToken);
-      setUser(userObj);
-      localStorage.setItem(SESSION_TOKEN_KEY, jwtToken);
-      localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(userObj));
+      if (jwtToken && userObj) {
+        setToken(jwtToken);
+        setUser(userObj);
+        localStorage.setItem(SESSION_TOKEN_KEY, jwtToken);
+        localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(userObj));
+      }
+      return res.data;
+    } catch (err) {
+      const res = await authService.verifyOtp(email, otp);
+      if (res && res.user && res.token) {
+        setUser(res.user);
+        setToken(res.token);
+      }
+      return res;
     }
-    return res.data;
   };
 
   // Resend OTP
   const resendOtp = async (email) => {
-    const res = await axiosInstance.post("/auth/resend-otp", { email });
-    return res.data;
+    try {
+      const res = await axiosInstance.post("/auth/resend-otp", { email });
+      return res.data;
+    } catch (err) {
+      return await authService.resendOtp(email);
+    }
   };
 
   // Logout
@@ -83,6 +101,30 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(ACTIVE_USER_KEY);
   };
 
+  // Direct Username/Password Login
+  const loginWithPassword = async (identifier, password) => {
+    const res = await authService.login(identifier, password);
+    if (res && res.user && res.token) {
+      setUser(res.user);
+      setToken(res.token);
+      localStorage.setItem(SESSION_TOKEN_KEY, res.token);
+      localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.user));
+    }
+    return res;
+  };
+
+  // Google Login (Email Verification handled by Google)
+  const loginWithGoogle = async (email, name) => {
+    const res = await authService.loginWithGoogle(email, name);
+    if (res && res.user && res.token) {
+      setUser(res.user);
+      setToken(res.token);
+      localStorage.setItem(SESSION_TOKEN_KEY, res.token);
+      localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.user));
+    }
+    return res;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -93,6 +135,8 @@ export function AuthProvider({ children }) {
         sendOtp,
         verifyOtp,
         resendOtp,
+        loginWithPassword,
+        loginWithGoogle,
         logout,
         fetchMe,
       }}
