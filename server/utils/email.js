@@ -8,45 +8,13 @@ import nodemailer from "nodemailer";
  */
 async function sendViaBrevoApi(recipientEmail, otpCode, apiKey) {
   const senderEmail = process.env.SMTP_USER || "lingeshr2007@gmail.com";
-  const senderName = "Nidhi Track Team";
+  const senderName = "Nidhi Track Security";
 
   const payload = {
     sender: { name: senderName, email: senderEmail },
     to: [{ email: recipientEmail }],
-    subject: "Nidhi Track Verification Code",
-    htmlContent: `
-      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e8e8ea; border-radius: 16px; padding: 30px; color: #1a1a1e;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
-          <div style="background-color: #4f5ded; width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: bold; font-size: 20px;">N</div>
-          <span style="font-size: 22px; font-weight: 800; color: #1a1a1e; letter-spacing: -0.5px;">Nidhi Track Verification Code</span>
-        </div>
-
-        <h2 style="font-size: 20px; font-weight: 700; color: #1a1a1e; margin-bottom: 8px;">Your Verification Code</h2>
-        <p style="font-size: 14px; color: #6b6b72; line-height: 1.6; margin-bottom: 24px;">
-          Hello,<br/><br/>
-          Your verification code is:
-        </p>
-
-        <div style="background-color: #f1f1f8; border: 1px solid #e8e8ea; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-          <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; color: #4f5ded; letter-spacing: 10px; display: block;">
-            ${otpCode}
-          </span>
-          <span style="font-size: 12px; color: #6b6b72; margin-top: 8px; display: block;">This code is valid for 5 minutes.</span>
-        </div>
-
-        <p style="font-size: 13px; color: #6b6b72; line-height: 1.5;">
-          Never share this code with anyone.<br/>
-          If you did not request this code, simply ignore this email.
-        </p>
-
-        <hr style="border: none; border-top: 1px solid #e8e8ea; margin: 24px 0;" />
-
-        <div style="font-size: 12px; color: #9ca3af; text-align: center;">
-          Thank you,<br/>
-          <strong>Nidhi Track Team</strong>
-        </div>
-      </div>
-    `,
+    subject: "NidhiTrack Verification Code",
+    htmlContent: getHtmlTemplate(otpCode),
   };
 
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -108,10 +76,10 @@ export async function sendOtpEmail(recipientEmail, otpCode) {
       });
 
       const info = await transporter.sendMail({
-        from: `"Nidhi Track Team" <${senderEmail}>`,
+        from: `"Nidhi Track Security" <${senderEmail}>`,
         to: recipientEmail,
-        subject: "Nidhi Track Verification Code",
-        text: `Hello,\n\nYour verification code is ${otpCode}.\n\nThis code is valid for 5 minutes.\nNever share this code with anyone.\nIf you did not request this code, simply ignore this email.\n\nThank you,\nNidhi Track Team`,
+        subject: "NidhiTrack Verification Code",
+        text: `Hello,\n\nYour NidhiTrack verification code is ${otpCode}.\n\nThis code is valid for 5 minutes.\nNever share this code with anyone.\nIf you did not request this code, simply ignore this email.\n\nThank you,\nNidhiTrack Security Team`,
         html: getHtmlTemplate(otpCode),
       });
 
@@ -133,10 +101,10 @@ export async function sendOtpEmail(recipientEmail, otpCode) {
       });
 
       const info = await transporterSsl.sendMail({
-        from: `"Nidhi Track Team" <${senderEmail}>`,
+        from: `"Nidhi Track Security" <${senderEmail}>`,
         to: recipientEmail,
-        subject: "Nidhi Track Verification Code",
-        text: `Hello,\n\nYour verification code is ${otpCode}.\n\nThis code is valid for 5 minutes.\nNever share this code with anyone.\nIf you did not request this code, simply ignore this email.\n\nThank you,\nNidhi Track Team`,
+        subject: "NidhiTrack Verification Code",
+        text: `Hello,\n\nYour NidhiTrack verification code is ${otpCode}.\n\nThis code is valid for 5 minutes.\nNever share this code with anyone.\nIf you did not request this code, simply ignore this email.\n\nThank you,\nNidhiTrack Security Team`,
         html: getHtmlTemplate(otpCode),
       });
 
@@ -163,7 +131,7 @@ export async function sendOtpEmail(recipientEmail, otpCode) {
       const info = await fallbackMailer.sendMail({
         from: `"Nidhi Track Security" <${senderEmail}>`,
         to: recipientEmail,
-        subject: "Nidhi Track Verification Code",
+        subject: "NidhiTrack Verification Code",
         html: getHtmlTemplate(otpCode),
       });
 
@@ -184,36 +152,83 @@ export async function sendOtpEmail(recipientEmail, otpCode) {
 
 function getHtmlTemplate(otpCode) {
   return `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e8e8ea; border-radius: 16px; padding: 30px; color: #1a1a1e;">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
-        <div style="background-color: #4f5ded; width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: bold; font-size: 20px;">N</div>
-        <span style="font-size: 22px; font-weight: 800; color: #1a1a1e; letter-spacing: -0.5px;">Nidhi Track Verification Code</span>
-      </div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>NidhiTrack Verification Code</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#F4F4F6; font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#F4F4F6; padding: 40px 10px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" style="max-width: 500px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.06); border: 1px solid #E8E8EA;">
+              <!-- Header Bar -->
+              <tr>
+                <td style="background-color: #4F5DED; padding: 28px 32px; text-align: left;">
+                  <table role="presentation" width="100%">
+                    <tr>
+                      <td style="vertical-align: middle; width: 44px;">
+                        <div style="background-color: #FFFFFF; width: 40px; height: 40px; border-radius: 10px; text-align: center; line-height: 40px; color: #4F5DED; font-weight: 900; font-size: 22px; font-family: sans-serif;">N</div>
+                      </td>
+                      <td style="vertical-align: middle; padding-left: 12px;">
+                        <span style="color: #FFFFFF; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; display: block;">NidhiTrack Security</span>
+                        <span style="color: #E0E7FF; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">2-Factor Authentication</span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
 
-      <h2 style="font-size: 20px; font-weight: 700; color: #1a1a1e; margin-bottom: 8px;">Your Verification Code</h2>
-      <p style="font-size: 14px; color: #6b6b72; line-height: 1.6; margin-bottom: 24px;">
-        Hello,<br/><br/>
-        Your verification code is:
-      </p>
+              <!-- Body Content -->
+              <tr>
+                <td style="padding: 32px; color: #1A1A1E;">
+                  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 12px 0; color: #1A1A1E; letter-spacing: -0.3px;">
+                    Verify Your Account
+                  </h1>
+                  <p style="font-size: 15px; color: #52525B; line-height: 1.6; margin: 0 0 24px 0;">
+                    Hello,<br/><br/>
+                    Please use the following 6-digit verification code to complete your login on NidhiTrack:
+                  </p>
 
-      <div style="background-color: #f1f1f8; border: 1px solid #e8e8ea; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-        <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; color: #4f5ded; letter-spacing: 10px; display: block;">
-          ${otpCode}
-        </span>
-        <span style="font-size: 12px; color: #6b6b72; margin-top: 8px; display: block;">This code is valid for 5 minutes.</span>
-      </div>
+                  <!-- OTP Code Display Card -->
+                  <div style="background-color: #F8FAFC; border: 2px dashed #4F5DED; border-radius: 16px; padding: 24px 16px; text-align: center; margin-bottom: 24px;">
+                    <span style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 38px; font-weight: 800; color: #4F5DED; letter-spacing: 12px; display: block; margin-left: 12px;">
+                      ${otpCode}
+                    </span>
+                    <span style="font-size: 12px; color: #64748B; font-weight: 600; margin-top: 10px; display: inline-block;">
+                      ⏱️ Valid for 5 minutes only
+                    </span>
+                  </div>
 
-      <p style="font-size: 13px; color: #6b6b72; line-height: 1.5;">
-        Never share this code with anyone.<br/>
-        If you did not request this code, simply ignore this email.
-      </p>
+                  <!-- Security Warning -->
+                  <div style="background-color: #FEF2F2; border-left: 4px solid #EF4444; padding: 14px 16px; border-radius: 8px; margin-bottom: 24px;">
+                    <p style="font-size: 13px; color: #991B1B; margin: 0; font-weight: 600; line-height: 1.4;">
+                      ⚠️ Never share this code with anyone. NidhiTrack team members will never ask for your verification code.
+                    </p>
+                  </div>
 
-      <hr style="border: none; border-top: 1px solid #e8e8ea; margin: 24px 0;" />
+                  <p style="font-size: 13px; color: #71717A; line-height: 1.5; margin: 0;">
+                    If you did not request this verification code, you can safely ignore this email. Someone may have entered your email address by mistake.
+                  </p>
+                </td>
+              </tr>
 
-      <div style="font-size: 12px; color: #9ca3af; text-align: center;">
-        Thank you,<br/>
-        <strong>Nidhi Track Team</strong>
-      </div>
-    </div>
+              <!-- Footer -->
+              <tr>
+                <td style="background-color: #FAFAFA; padding: 20px 32px; border-top: 1px solid #F4F4F6; text-align: center;">
+                  <p style="font-size: 12px; color: #A1A1AA; margin: 0; font-weight: 500;">
+                    © 2026 NidhiTrack Financial Technologies Inc. All rights reserved.<br/>
+                    Automated Security Notification • Do not reply directly to this email.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
   `;
 }
