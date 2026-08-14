@@ -34,34 +34,34 @@ export default function Transactions() {
 
   // Filter + sort
   const filtered = useMemo(() => {
-    let list = [...transactions];
+    let list = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
 
     // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
         (t) =>
-          t.description.toLowerCase().includes(q) ||
-          t.category.toLowerCase().includes(q)
+          (t.description || "").toLowerCase().includes(q) ||
+          (t.category || "").toLowerCase().includes(q)
       );
     }
 
     // Type filter
     if (filterType !== "all") {
-      list = list.filter((t) => t.type === filterType);
+      list = list.filter((t) => t && t.type === filterType);
     }
 
     // Category filter
     if (filterCat !== "All") {
-      list = list.filter((t) => t.category === filterCat);
+      list = list.filter((t) => t && t.category === filterCat);
     }
 
     // Sort
     list.sort((a, b) => {
       let cmp = 0;
-      if (sortBy === "date") cmp = new Date(a.date) - new Date(b.date);
-      else if (sortBy === "amount") cmp = a.amount - b.amount;
-      else if (sortBy === "description") cmp = a.description.localeCompare(b.description);
+      if (sortBy === "date") cmp = new Date(a?.date || 0) - new Date(b?.date || 0);
+      else if (sortBy === "amount") cmp = (Number(a?.amount) || 0) - (Number(b?.amount) || 0);
+      else if (sortBy === "description") cmp = (a?.description || "").localeCompare(b?.description || "");
       return sortDir === "desc" ? -cmp : cmp;
     });
 
@@ -73,10 +73,17 @@ export default function Transactions() {
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   const handleDelete = (tx) => {
+    if (!tx || !tx.id) return;
     const removed = tx;
     deleteTransaction(tx.id);
     showToast("Transaction deleted", () => {
-      addTransaction({ description: removed.description, amount: removed.amount, type: removed.type, category: removed.category, date: removed.date });
+      addTransaction({
+        description: removed.description || "Restored Transaction",
+        amount: Number(removed.amount) || 0,
+        type: removed.type || "expense",
+        category: removed.category || "Other",
+        date: removed.date || new Date().toISOString().slice(0, 10),
+      });
     });
     setConfirmDelete(null);
   };
@@ -88,7 +95,8 @@ export default function Transactions() {
   };
 
   const usedCategories = useMemo(() => {
-    const set = new Set(transactions.map((t) => t.category));
+    const safeTx = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
+    const set = new Set(safeTx.map((t) => t?.category).filter(Boolean));
     return ["All", ...Array.from(set).sort()];
   }, [transactions]);
 
@@ -98,7 +106,7 @@ export default function Transactions() {
       <div className="page-header">
         <div>
           <h2 className="page-title">Transactions</h2>
-          <p className="page-subtitle">{transactions.length} total transactions</p>
+          <p className="page-subtitle">{(Array.isArray(transactions) ? transactions.length : 0)} total transactions</p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
@@ -188,10 +196,11 @@ export default function Transactions() {
               </thead>
               <tbody>
                 {paginated.map((tx) => {
-                  const cat = categories.find((c) => c.name === tx.category);
+                  if (!tx) return null;
+                  const cat = (Array.isArray(categories) ? categories : []).find((c) => c && c.name === tx.category);
                   const isIncome = tx.type === "income";
                   return (
-                    <tr key={tx.id}>
+                    <tr key={tx.id || `tx_${Math.random()}`}>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
                           <div style={{
@@ -203,13 +212,13 @@ export default function Transactions() {
                               ? <FaArrowTrendUp size={13} color="#2E9E6D" />
                               : <FaArrowTrendDown size={13} color="#D65A5A" />}
                           </div>
-                          <span style={{ fontWeight: 600 }}>{tx.description}</span>
+                          <span style={{ fontWeight: 600 }}>{tx.description || "Untitled"}</span>
                         </div>
                       </td>
                       <td>
                         <span className="badge" style={{ background: "#F1F1F8", color: "#4F5DED" }}>
                           <CategoryIcon name={cat?.icon} size={11} />
-                          {tx.category}
+                          {tx.category || "Other"}
                         </span>
                       </td>
                       <td style={{ fontSize: "0.75rem", color: "#6B6B72" }}>

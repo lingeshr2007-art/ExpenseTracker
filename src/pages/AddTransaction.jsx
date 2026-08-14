@@ -355,28 +355,31 @@ export default function AddTransaction() {
               <p style={{ fontSize: "0.825rem", color: "var(--color-text-muted)" }}>No recent transactions found.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {recentTx.map((tx) => (
-                  <div
-                    key={tx.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "0.6rem 0.85rem",
-                      borderRadius: "10px",
-                      backgroundColor: "var(--color-bg, #FAFAFA)",
-                      border: "1px solid var(--color-border, #E8E8EA)",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-text-primary)" }}>{tx.description}</div>
-                      <div style={{ fontSize: "0.725rem", color: "var(--color-text-muted)" }}>{tx.category} • {tx.date}</div>
+                {recentTx.map((tx) => {
+                  if (!tx) return null;
+                  return (
+                    <div
+                      key={tx.id || Math.random()}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "0.6rem 0.85rem",
+                        borderRadius: "10px",
+                        backgroundColor: "var(--color-bg, #FAFAFA)",
+                        border: "1px solid var(--color-border, #E8E8EA)",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-text-primary)" }}>{tx.description || "Untitled"}</div>
+                        <div style={{ fontSize: "0.725rem", color: "var(--color-text-muted)" }}>{tx.category || "Other"} • {tx.date || ""}</div>
+                      </div>
+                      <div style={{ fontSize: "0.875rem", fontWeight: 800, color: tx.type === "income" ? "#2E9E6D" : "#D65A5A" }}>
+                        {tx.type === "income" ? "+" : "-"}₹{(Number(tx.amount) || 0).toLocaleString("en-IN")}
+                      </div>
                     </div>
-                    <div style={{ fontSize: "0.875rem", fontWeight: 800, color: tx.type === "income" ? "#2E9E6D" : "#D65A5A" }}>
-                      {tx.type === "income" ? "+" : "-"}₹{tx.amount.toLocaleString("en-IN")}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

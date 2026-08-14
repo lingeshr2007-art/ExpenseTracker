@@ -264,12 +264,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync active spent values for budgets
   useEffect(() => {
     const updatedBudgets = budgets.map(b => {
-      const monthTx = transactions.filter(t => {
-        return t.type === "expense" && 
-               t.category === b.category && 
-               t.date.slice(0, 7) === b.month;
+      const monthTx = (Array.isArray(transactions) ? transactions : []).filter(t => {
+        return t && 
+               t.type === "expense" && 
+               t.category === b?.category && 
+               (t.date || "").slice(0, 7) === b?.month;
       });
-      const spent = monthTx.reduce((sum, t) => sum + t.amount, 0);
+      const spent = monthTx.reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
       return { ...b, spent: parseFloat(spent.toFixed(2)) };
     });
     

@@ -2,12 +2,12 @@
 export function exportCSV(transactions) {
   if (!transactions.length) return;
   const headers = ["Date", "Description", "Category", "Type", "Amount"];
-  const rows = transactions.map((t) => [
-    t.date,
+  const rows = (Array.isArray(transactions) ? transactions : []).filter(Boolean).map((t) => [
+    t.date || "",
     `"${(t.description || "").replace(/"/g, '""')}"`,
-    t.category,
-    t.type,
-    t.amount.toFixed(2),
+    t.category || "Other",
+    t.type || "expense",
+    (Number(t.amount) || 0).toFixed(2),
   ]);
   const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });

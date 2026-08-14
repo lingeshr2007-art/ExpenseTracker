@@ -29,11 +29,30 @@ const DEFAULT_CATEGORIES = [
   { name: "Other", icon: "MoreHorizontal", color: "#4F5DED" },
 ];
 
+function sanitizeTx(t) {
+  if (!t) return null;
+  return {
+    ...t,
+    description: typeof t.description === "string" && t.description.trim() ? t.description.trim() : "Untitled",
+    amount: Number(t.amount) || 0,
+    type: t.type === "income" ? "income" : "expense",
+    category: typeof t.category === "string" && t.category.trim() ? t.category.trim() : "Other",
+    date: t.date || new Date().toISOString().slice(0, 10),
+    id: t.id || `tx_${Math.random().toString(36).slice(2, 9)}`,
+  };
+}
+
 function loadState(userId = null) {
   try {
     const key = getUserStorageKey(userId);
     const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.transactions)) {
+        parsed.transactions = parsed.transactions.map(sanitizeTx).filter(Boolean);
+      }
+      return parsed;
+    }
   } catch {
     /* ignore */
   }
@@ -97,8 +116,12 @@ const useStore = create((set, get) => ({
       ]);
 
       set((s) => {
+        let cleanTxs = s.transactions;
+        if (txs.status === "fulfilled" && Array.isArray(txs.value)) {
+          cleanTxs = txs.value.map(sanitizeTx).filter(Boolean);
+        }
         const next = {
-          transactions: txs.status === "fulfilled" && Array.isArray(txs.value) ? txs.value : s.transactions,
+          transactions: cleanTxs,
           budget: bRes.status === "fulfilled" && typeof bRes.value?.budget === "number" ? bRes.value.budget : s.budget,
           savingsGoals: goals.status === "fulfilled" && Array.isArray(goals.value) ? goals.value : s.savingsGoals,
           savingsHistory: history.status === "fulfilled" && Array.isArray(history.value) ? history.value : s.savingsHistory,
@@ -113,20 +136,22 @@ const useStore = create((set, get) => ({
   },
 
   // ─ Transactions ─
-  transactions: Array.isArray(saved?.transactions) ? saved.transactions : [],
+  transactions: Array.isArray(saved?.transactions) ? saved.transactions.map(sanitizeTx).filter(Boolean) : [],
   budget: typeof saved?.budget === "number" ? saved.budget : 0,
   debts: Array.isArray(saved?.debts) ? saved.debts : [],
   savingsGoals: Array.isArray(saved?.savingsGoals) ? saved.savingsGoals : [],
   savingsHistory: Array.isArray(saved?.savingsHistory) ? saved.savingsHistory : [],
 
   addTransaction: (data) => {
-    const tx = {
+    const rawTx = {
       ...data,
-      id: data.id || generateId(),
+      id: data?.id || generateId(),
       createdAt: new Date().toISOString(),
     };
+    const tx = sanitizeTx(rawTx);
     set((s) => {
-      const next = { transactions: [tx, ...s.transactions] };
+      const currentList = Array.isArray(s.transactions) ? s.transactions.filter(Boolean) : [];
+      const next = { transactions: [tx, ...currentList] };
       persist({ ...s, ...next });
       return next;
     });
@@ -137,21 +162,26 @@ const useStore = create((set, get) => ({
   },
 
   updateTransaction: (updated) => {
+    if (!updated || !updated.id) return;
+    const sanitizedUpdated = sanitizeTx(updated);
     set((s) => {
+      const currentList = Array.isArray(s.transactions) ? s.transactions : [];
       const next = {
-        transactions: s.transactions.map((t) =>
-          t.id === updated.id ? { ...t, ...updated } : t
-        ),
+        transactions: currentList.map((t) =>
+          t && t.id === sanitizedUpdated.id ? { ...t, ...sanitizedUpdated } : t
+        ).filter(Boolean),
       };
       persist({ ...s, ...next });
       return next;
     });
-    api.updateTransaction(updated.id, updated).catch(() => {});
+    api.updateTransaction(sanitizedUpdated.id, sanitizedUpdated).catch(() => {});
   },
 
   deleteTransaction: (id) => {
+    if (!id) return;
     set((s) => {
-      const next = { transactions: s.transactions.filter((t) => t.id !== id) };
+      const currentList = Array.isArray(s.transactions) ? s.transactions : [];
+      const next = { transactions: currentList.filter((t) => t && t.id !== id) };
       persist({ ...s, ...next });
       return next;
     });

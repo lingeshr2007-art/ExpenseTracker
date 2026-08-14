@@ -41,6 +41,13 @@ class ErrorBoundary extends React.Component {
   handleReset = () => {
     try {
       localStorage.removeItem("apexfinance_data");
+      localStorage.removeItem("apexfinance_data_guest");
+      const activeRaw = localStorage.getItem("myfinpal_active_user");
+      if (activeRaw) {
+        const u = JSON.parse(activeRaw);
+        const uid = u?.id || u?._id || u?.email;
+        if (uid) localStorage.removeItem(`apexfinance_data_${uid}`);
+      }
     } catch (e) {
       /* ignore */
     }
@@ -91,12 +98,34 @@ class ErrorBoundary extends React.Component {
               style={{
                 fontSize: "0.88rem",
                 color: "#C8C7CD",
-                marginBottom: "1.5rem",
+                marginBottom: "1rem",
                 lineHeight: 1.5,
               }}
             >
               A temporary render issue was detected. Click below to restore state and continue seamlessly.
             </p>
+            {this.state.error && (
+              <div
+                style={{
+                  textAlign: "left",
+                  backgroundColor: "#161824",
+                  padding: "0.75rem 1rem",
+                  borderRadius: "0.5rem",
+                  border: "1px solid #FF5460",
+                  color: "#FF5460",
+                  fontSize: "0.75rem",
+                  marginBottom: "1.25rem",
+                  maxHeight: "150px",
+                  overflowY: "auto",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                  fontFamily: "monospace",
+                }}
+              >
+                {this.state.error.toString()}
+                {this.state.error.stack && `\n\n${this.state.error.stack}`}
+              </div>
+            )}
             <button
               onClick={this.handleReset}
               style={{
