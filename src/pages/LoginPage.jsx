@@ -146,7 +146,7 @@ export default function LoginPage() {
       const res = await sendOtp(cleanEmail);
       setIsLoading(false);
       toast.success(res.message || `Security OTP sent to ${cleanEmail}`);
-      navigate("/verify-otp", { state: { email: cleanEmail } });
+      navigate("/verify-otp", { state: { email: cleanEmail, otpCode: res?.otpCode } });
     } catch (err) {
       setIsLoading(false);
       const errMsg =
