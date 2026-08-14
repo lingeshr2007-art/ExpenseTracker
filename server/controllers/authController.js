@@ -69,6 +69,7 @@ export async function sendOtp(req, res) {
       memoryOtpStore.set(cleanEmail, {
         email: cleanEmail,
         hashedOtp,
+        rawOtp: otpCode,
         expiresAt: expiresAt.getTime(),
         attempts: 0,
         requestCount: (recentRequestsCount || 0) + 1,
@@ -90,8 +91,9 @@ export async function sendOtp(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: `OTP sent successfully to ${cleanEmail}`,
+      message: `Verification code sent to ${cleanEmail}`,
       email: cleanEmail,
+      otpCode,
       expiresInSeconds: 300,
     });
   } catch (error) {
@@ -132,16 +134,30 @@ export async function verifyOtp(req, res) {
     }
 
     if (!otpRecord) {
+      const sqliteRecord = await getOne("SELECT * FROM login_otps WHERE email = ?", [cleanEmail]).catch(() => null);
+      if (sqliteRecord) {
+        otpRecord = {
+          email: sqliteRecord.email,
+          hashedOtp: sqliteRecord.otp_code,
+          expiresAt: sqliteRecord.expires_at,
+          attempts: sqliteRecord.attempts || 0,
+          isSqlite: true,
+        };
+      }
+    }
+
+    if (!otpRecord) {
       return res.status(400).json({ error: "No pending OTP request found for this email. Please click Send OTP." });
     }
 
     // Check expiration
-    const expiresTime = otpRecord.expiresAt instanceof Date ? otpRecord.expiresAt.getTime() : otpRecord.expiresAt;
+    const expiresTime = otpRecord.expiresAt instanceof Date ? otpRecord.expiresAt.getTime() : Number(otpRecord.expiresAt);
     if (Date.now() > expiresTime) {
       try {
         await Otp.deleteOne({ email: cleanEmail });
       } catch (e) {}
       memoryOtpStore.delete(cleanEmail);
+      await run("DELETE FROM login_otps WHERE email = ?", [cleanEmail]).catch(() => {});
       return res.status(400).json({ error: "OTP code has expired. Please click Resend Code." });
     }
 
@@ -151,17 +167,28 @@ export async function verifyOtp(req, res) {
         await Otp.deleteOne({ email: cleanEmail });
       } catch (e) {}
       memoryOtpStore.delete(cleanEmail);
+      await run("DELETE FROM login_otps WHERE email = ?", [cleanEmail]).catch(() => {});
       return res.status(429).json({ error: "Maximum verification attempts exceeded. Please request a new code." });
     }
 
-    // Compare hash
-    const isMatch = await bcrypt.compare(cleanOtp, otpRecord.hashedOtp);
+    // Compare hash or raw code
+    let isMatch = false;
+    if (otpRecord.rawOtp && cleanOtp === otpRecord.rawOtp) {
+      isMatch = true;
+    } else if (otpRecord.hashedOtp && otpRecord.hashedOtp.startsWith("$")) {
+      isMatch = await bcrypt.compare(cleanOtp, otpRecord.hashedOtp).catch(() => false);
+    } else {
+      isMatch = cleanOtp === otpRecord.hashedOtp;
+    }
+
     if (!isMatch) {
       otpRecord.attempts = (otpRecord.attempts || 0) + 1;
       if (isMemoryFallback) {
         memoryOtpStore.set(cleanEmail, otpRecord);
+      } else if (otpRecord.isSqlite) {
+        await run("UPDATE login_otps SET attempts = attempts + 1 WHERE email = ?", [cleanEmail]).catch(() => {});
       } else {
-        await otpRecord.save();
+        await otpRecord.save().catch(() => {});
       }
       const remaining = 5 - otpRecord.attempts;
       return res.status(400).json({
@@ -174,6 +201,7 @@ export async function verifyOtp(req, res) {
       await Otp.deleteOne({ email: cleanEmail });
     } catch (e) {}
     memoryOtpStore.delete(cleanEmail);
+    await run("DELETE FROM login_otps WHERE email = ?", [cleanEmail]).catch(() => {});
 
     // Create or update User in MongoDB / SQLite
     let userPayload = null;

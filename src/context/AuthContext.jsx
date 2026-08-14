@@ -56,6 +56,7 @@ export function AuthProvider({ children }) {
       const res = await axiosInstance.post("/auth/send-otp", { email });
       return res.data;
     } catch (err) {
+      if (err.response) throw err;
       return await authService.sendOtp(email);
     }
   };
@@ -75,6 +76,7 @@ export function AuthProvider({ children }) {
       }
       return res.data;
     } catch (err) {
+      if (err.response) throw err;
       const res = await authService.verifyOtp(email, otp);
       if (res && res.user && res.token) {
         setUser(res.user);
@@ -91,6 +93,7 @@ export function AuthProvider({ children }) {
       const res = await axiosInstance.post("/auth/resend-otp", { email });
       return res.data;
     } catch (err) {
+      if (err.response) throw err;
       return await authService.resendOtp(email);
     }
   };
