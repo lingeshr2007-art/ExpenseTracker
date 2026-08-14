@@ -8,7 +8,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentTab, setCurrentTab }: SidebarProps) {
-  const { accounts, user, logout, theme, setTheme, currency, setCurrency } = useApp();
+  const { accounts, user, logout, currency, setCurrency } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = [
@@ -189,22 +189,12 @@ export default function Sidebar({ currentTab, setCurrentTab }: SidebarProps) {
         {/* Quick Settings Panel */}
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <div style={{ display: "flex", gap: "0.5rem", width: "100%" }}>
-            {/* Theme Toggle */}
-            <button
-              className="btn btn-secondary"
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-              style={{ flex: 1, padding: "0.5rem", fontSize: "0.85rem" }}
-              aria-label="Toggle Dark/Light Mode"
-            >
-              {theme === "light" ? "🌙 Dark" : "☀️ Light"}
-            </button>
-
             {/* Currency Selector */}
             <select
               className="input-field"
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
-              style={{ width: "90px", padding: "0.5rem", fontSize: "0.85rem" }}
+              style={{ width: "100%", padding: "0.5rem", fontSize: "0.85rem" }}
               aria-label="Select Currency"
             >
               <option value="INR">₹ INR</option>

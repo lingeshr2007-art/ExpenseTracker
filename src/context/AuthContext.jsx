@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import axiosInstance from "../services/axiosInstance.js";
 import { authService } from "../services/authService.js";
+import useStore from "../store/useStore.js";
 
 const AuthContext = createContext();
 
@@ -27,6 +28,7 @@ export function AuthProvider({ children }) {
     if (!storedToken) {
       setUser(null);
       setIsLoading(false);
+      useStore.getState().clearStore();
       return;
     }
 
@@ -35,6 +37,7 @@ export function AuthProvider({ children }) {
       if (res.data && res.data.user) {
         setUser(res.data.user);
         localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.data.user));
+        useStore.getState().resetForUser(res.data.user.id || res.data.user._id || res.data.user.email);
       }
     } catch (err) {
       logout();
@@ -68,6 +71,7 @@ export function AuthProvider({ children }) {
         setUser(userObj);
         localStorage.setItem(SESSION_TOKEN_KEY, jwtToken);
         localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(userObj));
+        useStore.getState().resetForUser(userObj.id || userObj._id || userObj.email);
       }
       return res.data;
     } catch (err) {
@@ -75,6 +79,7 @@ export function AuthProvider({ children }) {
       if (res && res.user && res.token) {
         setUser(res.user);
         setToken(res.token);
+        useStore.getState().resetForUser(res.user.id || res.user._id || res.user.email);
       }
       return res;
     }
@@ -99,6 +104,7 @@ export function AuthProvider({ children }) {
     setToken(null);
     localStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(ACTIVE_USER_KEY);
+    useStore.getState().clearStore();
   };
 
   // Direct Username/Password Login
@@ -109,6 +115,7 @@ export function AuthProvider({ children }) {
       setToken(res.token);
       localStorage.setItem(SESSION_TOKEN_KEY, res.token);
       localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.user));
+      useStore.getState().resetForUser(res.user.id || res.user._id || res.user.email);
     }
     return res;
   };
@@ -121,6 +128,7 @@ export function AuthProvider({ children }) {
       setToken(res.token);
       localStorage.setItem(SESSION_TOKEN_KEY, res.token);
       localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.user));
+      useStore.getState().resetForUser(res.user.id || res.user._id || res.user.email);
     }
     return res;
   };

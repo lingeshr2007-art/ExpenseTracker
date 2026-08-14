@@ -231,6 +231,7 @@ export async function verifyOtp(req, res) {
     const token = jwt.sign(
       {
         id: userPayload.id,
+        _id: userPayload.id,
         email: userPayload.email,
         name: userPayload.name,
       },

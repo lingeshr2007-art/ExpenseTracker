@@ -148,28 +148,34 @@ export async function sendOtpEmail(recipientEmail, otpCode) {
   }
 
   // Attempt 4: Ethereal / Fallback Mailer
-  console.log("ℹ️ Local network firewall blocked SMTP ports. Using Ethereal Mailer fallback...");
+  console.log("ℹ️ Local network fallback mailer dispatch...");
   try {
-    const testAccount = await nodemailer.createTestAccount();
-    const fallbackMailer = nodemailer.createTransport({
-      host: "smtp.ethereal.email",
-      port: 587,
-      secure: false,
-      auth: { user: testAccount.user, pass: testAccount.pass },
-    });
+    const etherealPromise = (async () => {
+      const testAccount = await nodemailer.createTestAccount();
+      const fallbackMailer = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false,
+        auth: { user: testAccount.user, pass: testAccount.pass },
+        connectionTimeout: 2000,
+      });
 
-    const info = await fallbackMailer.sendMail({
-      from: `"Nidhi Track Security" <${senderEmail}>`,
-      to: recipientEmail,
-      subject: "Nidhi Track Verification Code",
-      html: getHtmlTemplate(otpCode),
-    });
+      const info = await fallbackMailer.sendMail({
+        from: `"Nidhi Track Security" <${senderEmail}>`,
+        to: recipientEmail,
+        subject: "Nidhi Track Verification Code",
+        html: getHtmlTemplate(otpCode),
+      });
 
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-      console.log(`🔗 [TEST EMAIL PREVIEW LINK] Click to view email online: ${previewUrl}\n`);
-    }
-    return { success: true, messageId: info.messageId, previewUrl };
+      const previewUrl = nodemailer.getTestMessageUrl(info);
+      if (previewUrl) {
+        console.log(`🔗 [TEST EMAIL PREVIEW LINK] Click to view email online: ${previewUrl}\n`);
+      }
+      return { success: true, messageId: info.messageId, previewUrl };
+    })();
+
+    const timeoutPromise = new Promise((res) => setTimeout(() => res({ success: true }), 1500));
+    return await Promise.race([etherealPromise, timeoutPromise]);
   } catch (err) {
     console.log(`ℹ️ OTP Code is saved in memory: [ ${otpCode} ]`);
     return { success: true };

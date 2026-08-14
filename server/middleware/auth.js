@@ -14,8 +14,12 @@ export function authenticateToken(req, res, next) {
   try {
     const user = jwt.verify(token, JWT_SECRET);
     req.user = user;
+    if (req.user && req.user.id && !req.user._id) {
+      req.user._id = req.user.id;
+    }
     next();
   } catch (err) {
     return res.status(403).json({ error: "Invalid or expired token." });
   }
 }
+

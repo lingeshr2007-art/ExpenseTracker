@@ -2,8 +2,19 @@
 import { create } from "zustand";
 import api from "../services/api";
 
-// ── Constants ──
-const STORAGE_KEY = "apexfinance_data";
+// ── Constants & Helpers ──
+function getUserStorageKey(userId = null) {
+  try {
+    if (userId) return `apexfinance_data_${userId}`;
+    const activeRaw = localStorage.getItem("myfinpal_active_user");
+    if (activeRaw) {
+      const u = JSON.parse(activeRaw);
+      const uid = u?.id || u?._id || u?.email;
+      if (uid) return `apexfinance_data_${uid}`;
+    }
+  } catch (e) {}
+  return "apexfinance_data_guest";
+}
 
 const DEFAULT_CATEGORIES = [
   { name: "Food", icon: "UtensilsCrossed", color: "#4F5DED" },
@@ -18,9 +29,10 @@ const DEFAULT_CATEGORIES = [
   { name: "Other", icon: "MoreHorizontal", color: "#4F5DED" },
 ];
 
-function loadState() {
+function loadState(userId = null) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getUserStorageKey(userId);
+    const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
   } catch {
     /* ignore */
@@ -30,9 +42,10 @@ function loadState() {
 
 function persist(state) {
   try {
+    const key = getUserStorageKey();
     const { transactions, budget, theme, sidebarHidden, categories, debts, savingsGoals, savingsHistory, readNotificationIds, deletedNotificationIds } = state;
     localStorage.setItem(
-      STORAGE_KEY,
+      key,
       JSON.stringify({ transactions, budget, theme, sidebarHidden, categories, debts, savingsGoals, savingsHistory, readNotificationIds, deletedNotificationIds })
     );
   } catch {
@@ -49,6 +62,29 @@ function generateId() {
 const saved = loadState();
 
 const useStore = create((set, get) => ({
+  // ─ User Store Management ─
+  resetForUser: async (userId) => {
+    const loaded = loadState(userId);
+    set(() => ({
+      transactions: Array.isArray(loaded?.transactions) ? loaded.transactions : [],
+      budget: typeof loaded?.budget === "number" ? loaded.budget : 0,
+      debts: Array.isArray(loaded?.debts) ? loaded.debts : [],
+      savingsGoals: Array.isArray(loaded?.savingsGoals) ? loaded.savingsGoals : [],
+      savingsHistory: Array.isArray(loaded?.savingsHistory) ? loaded.savingsHistory : [],
+    }));
+    await get().fetchFromApi();
+  },
+
+  clearStore: () => {
+    set({
+      transactions: [],
+      budget: 0,
+      debts: [],
+      savingsGoals: [],
+      savingsHistory: [],
+    });
+  },
+
   // ─ Async API Sync ─
   fetchFromApi: async () => {
     try {
@@ -78,7 +114,7 @@ const useStore = create((set, get) => ({
 
   // ─ Transactions ─
   transactions: Array.isArray(saved?.transactions) ? saved.transactions : [],
-  budget: typeof saved?.budget === "number" ? saved.budget : 50000,
+  budget: typeof saved?.budget === "number" ? saved.budget : 0,
   debts: Array.isArray(saved?.debts) ? saved.debts : [],
   savingsGoals: Array.isArray(saved?.savingsGoals) ? saved.savingsGoals : [],
   savingsHistory: Array.isArray(saved?.savingsHistory) ? saved.savingsHistory : [],
@@ -150,10 +186,7 @@ const useStore = create((set, get) => ({
   },
 
   // ─ Friends & Debts ─
-  debts: saved?.debts || [
-    { id: "debt-1", friendName: "Rahul Sharma", amount: 5000, returnedAmount: 2000, borrowDate: "2026-07-10", dueDate: "2026-08-15", status: "Partially Paid", notes: "Weekend getaway expense split" },
-    { id: "debt-2", friendName: "Priya Patel", amount: 2500, returnedAmount: 0, borrowDate: "2026-07-20", dueDate: "2026-08-05", status: "Pending", notes: "Concert tickets advance" }
-  ],
+  debts: Array.isArray(saved?.debts) ? saved.debts : [],
 
   addFriendDebt: (data) => {
     const debt = {
@@ -213,20 +246,20 @@ const useStore = create((set, get) => ({
     get().showToast("Debt record removed");
   },
 
-  // ─ Theme & Navigation ─
-  theme: saved?.theme || "dark",
+  // ─ Theme & Navigation (Light Mode Only) ─
+  theme: "light",
 
   toggleTheme: () => {
     set((s) => {
-      const next = { theme: s.theme === "light" ? "dark" : "light" };
+      const next = { theme: "light" };
       persist({ ...s, ...next });
       return next;
     });
   },
 
-  setTheme: (t) => {
+  setTheme: () => {
     set((s) => {
-      const next = { theme: t };
+      const next = { theme: "light" };
       persist({ ...s, ...next });
       return next;
     });
@@ -511,93 +544,8 @@ const useStore = create((set, get) => ({
   },
 
   // ─ Savings Goals & History ─
-  savingsGoals: saved?.savingsGoals || [
-    {
-      id: "goal_1",
-      name: "Emergency Reserve Fund",
-      category: "Emergency",
-      target: 100000,
-      current: 45000,
-      deadline: "2026-12-31",
-      priority: "High",
-      color: "#EF4444",
-      icon: "Emergency",
-      createdAt: "2026-01-10",
-      lastMilestone: 25
-    },
-    {
-      id: "goal_2",
-      name: "Vacation to Bali",
-      category: "Vacation",
-      target: 150000,
-      current: 95000,
-      deadline: "2026-10-15",
-      priority: "Medium",
-      color: "#3B82F6",
-      icon: "Vacation",
-      createdAt: "2026-02-01",
-      lastMilestone: 50
-    },
-    {
-      id: "goal_3",
-      name: "MacBook Pro M3 Max",
-      category: "Laptop",
-      target: 220000,
-      current: 180000,
-      deadline: "2026-09-30",
-      priority: "High",
-      color: "#10B981",
-      icon: "Laptop",
-      createdAt: "2026-03-05",
-      lastMilestone: 75
-    },
-    {
-      id: "goal_4",
-      name: "Home Down Payment",
-      category: "House",
-      target: 500000,
-      current: 125000,
-      deadline: "2027-06-30",
-      priority: "Urgent",
-      color: "#8B5CF6",
-      icon: "House",
-      createdAt: "2026-01-01",
-      lastMilestone: 25
-    }
-  ],
-
-  savingsHistory: saved?.savingsHistory || [
-    {
-      id: "sh_1",
-      goalId: "goal_2",
-      goalName: "Vacation to Bali",
-      type: "deposit",
-      amount: 15000,
-      date: "2026-07-15",
-      method: "Bank Transfer",
-      notes: "July monthly savings contribution"
-    },
-    {
-      id: "sh_2",
-      goalId: "goal_3",
-      goalName: "MacBook Pro M3 Max",
-      type: "deposit",
-      amount: 20000,
-      date: "2026-07-20",
-      method: "UPI",
-      notes: "Freelance bonus deposit"
-    },
-    {
-      id: "sh_3",
-      goalId: "goal_1",
-      goalName: "Emergency Reserve Fund",
-      type: "deposit",
-      amount: 10000,
-      date: "2026-07-25",
-      method: "Auto-Deduct",
-      notes: "Monthly emergency allocation"
-    }
-  ],
+  savingsGoals: Array.isArray(saved?.savingsGoals) ? saved.savingsGoals : [],
+  savingsHistory: Array.isArray(saved?.savingsHistory) ? saved.savingsHistory : [],
 
   addSavingsGoal: (goalData) => {
     const newGoal = {

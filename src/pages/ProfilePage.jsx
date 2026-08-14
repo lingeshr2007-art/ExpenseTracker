@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import useStore from "../store/useStore";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext.jsx";
+import { authService } from "../services/authService";
 import { formatCurrency } from "../utils/format";
 
 export default function ProfilePage() {
@@ -27,25 +29,47 @@ export default function ProfilePage() {
   const getTotals = useStore((state) => state.getTotals);
   const getMonthlyExpense = useStore((state) => state.getMonthlyExpense);
   const appContext = useApp();
+  const { user: authUser, logout: authLogout } = useAuth();
 
-  // Load User Data from context or localStorage
-  const initialUser = appContext?.user || {
-    name: "Suresh Kumar",
-    email: "suresh@myfinpal.com",
-    memberSince: "Jan 2026",
-    accountType: "Premium",
-    avatarUrl: "",
-  };
-
-  const [user, setUser] = useState(() => {
+  // Primary source of truth: logged in user from AuthContext
+  const getInitialProfile = () => {
+    if (authUser && authUser.name) {
+      return {
+        name: authUser.name,
+        email: authUser.email || "",
+        memberSince: authUser.memberSince || "Jan 2026",
+        accountType: authUser.accountType || "Premium",
+        avatarUrl: "",
+      };
+    }
     try {
-      const saved = localStorage.getItem("myfinpal_user_profile");
+      const activeUserKey = authUser?.id ? `myfinpal_user_profile_${authUser.id}` : "myfinpal_user_profile";
+      const saved = localStorage.getItem(activeUserKey);
       if (saved) return JSON.parse(saved);
     } catch (e) {
       /* ignore */
     }
-    return initialUser;
-  });
+    return {
+      name: authUser?.name || appContext?.user?.name || "User",
+      email: authUser?.email || appContext?.user?.email || "",
+      memberSince: "Jan 2026",
+      accountType: "Premium",
+      avatarUrl: "",
+    };
+  };
+
+  const [user, setUser] = useState(getInitialProfile);
+
+  // Automatically sync profile name whenever logged-in auth user updates
+  useEffect(() => {
+    if (authUser && authUser.name) {
+      setUser((prev) => ({
+        ...prev,
+        name: authUser.name,
+        email: authUser.email || prev.email,
+      }));
+    }
+  }, [authUser]);
 
   // Calculate real financial totals directly from store
   const totals = typeof getTotals === "function" ? getTotals() : { income: 0, expense: 0, balance: 0 };
@@ -82,14 +106,14 @@ export default function ProfilePage() {
       /* ignore */
     }
     setIsEditModalOpen(false);
-    if (showToast) showToast("Profile updated successfully! ✨");
+    if (showToast) showToast("Profile updated successfully!");
   };
 
   // Change Password
   const handleChangePassword = (e) => {
     e.preventDefault();
     if (!currentPassword || !newPassword) {
-      if (showToast) showToast("Please fill in all password fields");
+      if (showToast) showToast("Please fill in all password fields.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -100,7 +124,7 @@ export default function ProfilePage() {
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
-    if (showToast) showToast("Password changed successfully! 🔒");
+    if (showToast) showToast("Password changed successfully!");
   };
 
   // Avatar Upload simulation
@@ -116,23 +140,25 @@ export default function ProfilePage() {
         } catch (err) {
           /* ignore */
         }
-        if (showToast) showToast("Profile picture updated! 📷");
+        if (showToast) showToast("Profile picture updated!");
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Handle Logout - Completely wipe local data and hard reset to landing page /
-  const handleLogout = (e) => {
+  // Handle Logout - Completely wipe local data and hard reset to login page
+  const handleLogout = async (e) => {
     if (e) {
       if (e.preventDefault) e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
     }
     try {
+      if (authLogout) await authLogout();
       authService.logout();
       if (appContext && typeof appContext.logout === "function") {
         appContext.logout();
       }
+      useStore.getState().clearStore();
       localStorage.clear();
       sessionStorage.clear();
     } catch (err) {
@@ -155,411 +181,390 @@ export default function ProfilePage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
       style={{
-        maxWidth: "960px",
+        maxWidth: "1280px",
         margin: "0 auto",
-        padding: "1.5rem 1rem 3rem",
+        padding: "0.5rem 0 2rem",
         fontFamily: "'Inter', system-ui, sans-serif",
+        width: "100%",
       }}
     >
-      {/* Page Title & Subtitle */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1
-          style={{
-            fontSize: "1.85rem",
-            fontWeight: 800,
-            fontFamily: "'Space Grotesk', sans-serif",
-            color: "var(--color-text-primary, #0F172A)",
-            letterSpacing: "-0.02em",
-            marginBottom: "0.25rem",
-          }}
-        >
-          Profile
-        </h1>
-        <p style={{ fontSize: "0.9rem", color: "var(--color-text-muted, #64748B)", fontWeight: 500 }}>
-          Manage your account.
-        </p>
-      </div>
-
-      {/* ── CENTERED PROFILE CARD (WHITE GLASSMORPHISM 24px ROUNDED) ── */}
-      <motion.div
-        whileHover={{ y: -4 }}
-        transition={{ duration: 0.2 }}
-        style={{
-          maxWidth: "600px",
-          margin: "0 auto 2.5rem",
-          borderRadius: "24px",
-          background: "var(--color-surface, rgba(255, 255, 255, 0.85))",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          border: "1px solid var(--color-border, rgba(226, 232, 240, 0.8))",
-          boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.06), 0 10px 20px -10px rgba(0, 0, 0, 0.04)",
-          padding: "2.5rem 2rem",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {/* Ambient Top Subtle Emerald Accent Line */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: "4px",
-            background: "#3EC3D5",
-          }}
-        />
-
-        {/* Large Circular Profile Picture with Camera Icon Overlay */}
-        <div style={{ position: "relative", marginBottom: "1.25rem" }}>
-          {user.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              style={{
-                width: "110px",
-                height: "110px",
-                borderRadius: "50%",
-                objectFit: "cover",
-                border: "4px solid #3AE6C3",
-                boxShadow: "0 8px 24px rgba(58, 230, 195, 0.3)",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: "110px",
-                height: "110px",
-                borderRadius: "50%",
-                background: "linear-gradient(135deg, #101010 0%, #1E293B 100%)",
-                color: "#3AE6C3",
-                fontSize: "2.25rem",
-                fontWeight: 800,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "4px solid #3AE6C3",
-                boxShadow: "0 8px 24px rgba(58, 230, 195, 0.25)",
-                letterSpacing: "0.05em",
-              }}
-            >
-              {getInitials(user.name)}
-            </div>
-          )}
-
-          {/* Camera Upload Icon */}
-          <label
-            htmlFor="avatar-upload"
+      {/* Header Banner */}
+      <div style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1
             style={{
-              position: "absolute",
-              bottom: "2px",
-              right: "2px",
-              width: "34px",
-              height: "34px",
-              borderRadius: "50%",
-              backgroundColor: "#101010",
-              color: "#3AE6C3",
-              border: "2px solid #FFFFFF",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
-              transition: "transform 0.15s ease",
-            }}
-            title="Change profile photo"
-          >
-            <Camera size={16} />
-            <input
-              id="avatar-upload"
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarChange}
-              style={{ display: "none" }}
-            />
-          </label>
-        </div>
-
-        {/* Full Name */}
-        <h2
-          style={{
-            fontSize: "1.65rem",
-            fontWeight: 800,
-            fontFamily: "'Space Grotesk', sans-serif",
-            color: "var(--color-text-primary, #0F172A)",
-            marginBottom: "0.25rem",
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {user.name}
-        </h2>
-
-        {/* Email Address */}
-        <p style={{ fontSize: "0.9rem", color: "var(--color-text-muted, #64748B)", fontWeight: 500, marginBottom: "1.5rem" }}>
-          {user.email}
-        </p>
-
-        {/* ── THREE BUTTONS ONLY ── */}
-        <div
-          style={{
-            width: "100%",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.75rem",
-          }}
-        >
-          {/* Edit Profile */}
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setEditName(user.name);
-              setEditEmail(user.email);
-              setIsEditModalOpen(true);
-            }}
-            style={{
-              width: "100%",
-              padding: "0.875rem 1.25rem",
-              borderRadius: "14px",
-              border: "1px solid var(--color-border, #E2E8F0)",
-              backgroundColor: "var(--color-surface, #FFFFFF)",
+              fontSize: "1.75rem",
+              fontWeight: 800,
+              fontFamily: "'Space Grotesk', sans-serif",
               color: "var(--color-text-primary, #0F172A)",
-              fontWeight: 700,
-              fontSize: "0.925rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.625rem",
-              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-              transition: "all 0.2s ease",
+              letterSpacing: "-0.02em",
+              marginBottom: "0.25rem",
             }}
           >
-            <Edit3 size={18} color="#3EC3D5" />
-            <span>Edit Profile</span>
-          </motion.button>
-
-          {/* Change Password */}
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setIsPasswordModalOpen(true)}
-            style={{
-              width: "100%",
-              padding: "0.875rem 1.25rem",
-              borderRadius: "14px",
-              border: "1px solid var(--color-border, #E2E8F0)",
-              backgroundColor: "var(--color-surface, #FFFFFF)",
-              color: "var(--color-text-primary, #0F172A)",
-              fontWeight: 700,
-              fontSize: "0.925rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.625rem",
-              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <Lock size={18} color="#3EC3D5" />
-            <span>Change Password</span>
-          </motion.button>
-
-          {/* Logout */}
-          <button
-            type="button"
-            onClick={handleLogout}
-            style={{
-              width: "100%",
-              padding: "0.875rem 1.25rem",
-              borderRadius: "14px",
-              border: "1px solid #F87171",
-              backgroundColor: "#FEF2F2",
-              color: "#DC2626",
-              fontWeight: 700,
-              fontSize: "0.925rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.625rem",
-              transition: "all 0.2s ease",
-              position: "relative",
-              zIndex: 10,
-            }}
-          >
-            <LogOut size={18} color="#DC2626" />
-            <span>Logout</span>
-          </button>
+            Account & Profile
+          </h1>
+          <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted, #64748B)", fontWeight: 500 }}>
+            Manage your personal profile, security preferences, and financial overview.
+          </p>
         </div>
-      </motion.div>
-
-      {/* ── ACCOUNT OVERVIEW SECTION (3 COLORFUL STAT CARDS) ── */}
-      <div style={{ marginTop: "1rem" }}>
-        <h3
+        
+        <button
+          onClick={() => navigate("/dashboard")}
           style={{
-            fontSize: "1.1rem",
-            fontWeight: 800,
-            fontFamily: "'Space Grotesk', sans-serif",
-            color: "var(--color-text-primary, #0F172A)",
-            marginBottom: "1rem",
-            display: "flex",
+            display: "inline-flex",
             alignItems: "center",
             gap: "0.5rem",
+            padding: "0.5rem 1rem",
+            borderRadius: "12px",
+            border: "1px solid var(--color-border, #E2E8F0)",
+            backgroundColor: "var(--color-surface, #FFFFFF)",
+            color: "var(--color-text-primary, #0F172A)",
+            fontWeight: 600,
+            fontSize: "0.85rem",
+            cursor: "pointer",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
           }}
         >
-          <span>Account Overview</span>
-        </h3>
+          ← Back to Dashboard
+        </button>
+      </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: "1.25rem",
-          }}
-        >
-          {/* Card 1: Total Balance */}
-          <motion.div
-            whileHover={{ y: -3, scale: 1.01 }}
-            transition={{ duration: 0.2 }}
+      {/* 2-Column Responsive Dashboard Layout */}
+      <div className="profile-dashboard-layout" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.5rem" }}>
+        
+        {/* ── LEFT COLUMN: PROFILE CARD & SECURITY ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          
+          {/* Main Profile Identity Card */}
+          <div
             style={{
-              borderRadius: "16px",
-              background: "#FFFFFF",
-              border: "1px solid #E8E8EA",
-              borderLeft: "4px solid #4F5DED",
-              color: "#1A1A1E",
-              padding: "1.25rem 1.5rem",
-              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.03)",
+              borderRadius: "20px",
+              background: "var(--color-surface, #FFFFFF)",
+              border: "1px solid var(--color-border, #E2E8F0)",
+              boxShadow: "0 10px 30px rgba(0, 0, 0, 0.04)",
+              padding: "2rem 1.5rem",
               display: "flex",
               flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "130px",
+              alignItems: "center",
+              textAlign: "center",
+              position: "relative",
+              overflow: "hidden",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.06em", color: "#6B6B72", textTransform: "uppercase" }}>
-                TOTAL BALANCE
-              </span>
-              <div
+            {/* Top Cyan Accent Strip */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0, left: 0, right: 0,
+                height: "4px",
+                background: "linear-gradient(90deg, #3EC3D5 0%, #4F5DED 100%)",
+              }}
+            />
+
+            {/* Profile Avatar */}
+            <div style={{ position: "relative", marginBottom: "1rem" }}>
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  style={{
+                    width: "100px",
+                    height: "100px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: "4px solid #3EC3D5",
+                    boxShadow: "0 8px 20px rgba(62, 195, 213, 0.25)",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "100px",
+                    height: "100px",
+                    borderRadius: "50%",
+                    background: "linear-gradient(135deg, #1A1A1E 0%, #23273C 100%)",
+                    color: "#3EC3D5",
+                    fontSize: "2rem",
+                    fontWeight: 800,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: "4px solid #3EC3D5",
+                    boxShadow: "0 8px 20px rgba(62, 195, 213, 0.25)",
+                  }}
+                >
+                  {getInitials(user.name)}
+                </div>
+              )}
+
+              <label
+                htmlFor="avatar-upload-main"
                 style={{
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "10px",
-                  backgroundColor: "#F1F1F8",
+                  position: "absolute",
+                  bottom: "2px",
+                  right: "2px",
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  backgroundColor: "#161824",
+                  color: "#3EC3D5",
+                  border: "2px solid #FFFFFF",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
                 }}
+                title="Change photo"
               >
-                <Wallet size={18} color="#4F5DED" />
-              </div>
+                <Camera size={14} />
+                <input
+                  id="avatar-upload-main"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  style={{ display: "none" }}
+                />
+              </label>
             </div>
-            <div>
-              <div style={{ fontSize: "1.75rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "#1A1A1E" }}>
-                {formatCurrency(currentBalance)}
-              </div>
-              <span style={{ fontSize: "0.725rem", color: "#6B6B72", fontWeight: 500 }}>
-                Across all active wallets
-              </span>
-            </div>
-          </motion.div>
 
-          {/* Card 2: Monthly Income */}
-          <motion.div
-            whileHover={{ y: -3, scale: 1.01 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              borderRadius: "16px",
-              background: "#FFFFFF",
-              border: "1px solid #E8E8EA",
-              borderLeft: "4px solid #2E9E6D",
-              color: "#1A1A1E",
-              padding: "1.25rem 1.5rem",
-              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.03)",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "130px",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.06em", color: "#6B6B72", textTransform: "uppercase" }}>
-                MONTHLY INCOME
-              </span>
-              <div
+            {/* Name & Account Badges */}
+            <h2
+              style={{
+                fontSize: "1.45rem",
+                fontWeight: 800,
+                color: "var(--color-text-primary, #0F172A)",
+                marginBottom: "0.25rem",
+              }}
+            >
+              {user.name}
+            </h2>
+
+            <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted, #94A3B8)", fontWeight: 500, marginBottom: "1.5rem" }}>
+              Member since {user.memberSince || "Jan 2026"}
+            </p>
+
+            {/* Action Buttons */}
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+              <button
+                onClick={() => {
+                  setEditName(user.name);
+                  setEditEmail(user.email);
+                  setIsEditModalOpen(true);
+                }}
                 style={{
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "10px",
-                  backgroundColor: "#E6F4EA",
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  borderRadius: "12px",
+                  border: "1px solid var(--color-border, #E2E8F0)",
+                  backgroundColor: "var(--color-surface, #FFFFFF)",
+                  color: "var(--color-text-primary, #0F172A)",
+                  fontWeight: 700,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  gap: "0.5rem",
+                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.02)",
+                  transition: "all 0.2s ease",
                 }}
               >
-                <TrendingUp size={18} color="#2E9E6D" />
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: "1.75rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "#1A1A1E" }}>
-                {formatCurrency(monthlyIncome)}
-              </div>
-              <span style={{ fontSize: "0.725rem", color: "#2E9E6D", fontWeight: 600 }}>
-                ↑ Verified Cash Inflow
-              </span>
-            </div>
-          </motion.div>
+                <Edit3 size={16} color="#3EC3D5" />
+                <span>Edit Profile Details</span>
+              </button>
 
-          {/* Card 3: Monthly Expenses */}
-          <motion.div
-            whileHover={{ y: -3, scale: 1.01 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              borderRadius: "16px",
-              background: "#FFFFFF",
-              border: "1px solid #E8E8EA",
-              borderLeft: "4px solid #D65A5A",
-              color: "#1A1A1E",
-              padding: "1.25rem 1.5rem",
-              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.03)",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "130px",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.06em", color: "#6B6B72", textTransform: "uppercase" }}>
-                MONTHLY EXPENSES
-              </span>
-              <div
+              <button
+                onClick={() => setIsPasswordModalOpen(true)}
                 style={{
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "10px",
-                  backgroundColor: "#FCE8E6",
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  borderRadius: "12px",
+                  border: "1px solid var(--color-border, #E2E8F0)",
+                  backgroundColor: "var(--color-surface, #FFFFFF)",
+                  color: "var(--color-text-primary, #0F172A)",
+                  fontWeight: 700,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  gap: "0.5rem",
+                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.02)",
+                  transition: "all 0.2s ease",
                 }}
               >
-                <TrendingDown size={18} color="#D65A5A" />
-              </div>
+                <Lock size={16} color="#4F5DED" />
+                <span>Change Password</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  borderRadius: "12px",
+                  border: "1px solid #F87171",
+                  backgroundColor: "#FEF2F2",
+                  color: "#DC2626",
+                  fontWeight: 700,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <LogOut size={16} color="#DC2626" />
+                <span>Sign Out</span>
+              </button>
             </div>
-            <div>
-              <div style={{ fontSize: "1.75rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "#1A1A1E" }}>
-                {formatCurrency(displayExpense)}
-              </div>
-              <span style={{ fontSize: "0.725rem", color: "#D65A5A", fontWeight: 600 }}>
-                ↓ Tracked Spending
-              </span>
+          </div>
+        </div>
+
+        {/* ── RIGHT COLUMN: FINANCIAL OVERVIEW ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          
+          {/* Financial Overview Card Frame */}
+          <div
+            style={{
+              borderRadius: "20px",
+              background: "var(--color-surface, #FFFFFF)",
+              border: "1px solid var(--color-border, #E2E8F0)",
+              boxShadow: "0 10px 30px rgba(0, 0, 0, 0.04)",
+              padding: "2rem 1.5rem",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            <div style={{ marginBottom: "1.25rem" }}>
+              <h3 style={{ fontSize: "1.15rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--color-text-primary, #0F172A)", marginBottom: "0.25rem" }}>
+                Financial Overview
+              </h3>
+              <p style={{ fontSize: "0.825rem", color: "var(--color-text-muted, #64748B)", fontWeight: 500 }}>
+                Live summary of your balance, monthly income, expenses, and savings rate.
+              </p>
             </div>
-          </motion.div>
+
+            {/* Financial Totals Summary Grid (4 Stats) */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", flex: 1, alignItems: "center" }}>
+              
+              {/* Card 1: Balance */}
+              <div
+                style={{
+                  borderRadius: "16px",
+                  background: "var(--color-bg, #F8FAFC)",
+                  border: "1px solid var(--color-border, #E2E8F0)",
+                  borderLeft: "4px solid #4F5DED",
+                  padding: "1.25rem",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.02)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", color: "#6B6B72", textTransform: "uppercase" }}>
+                    CURRENT BALANCE
+                  </span>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "8px", backgroundColor: "#F1F1F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Wallet size={16} color="#4F5DED" />
+                  </div>
+                </div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--color-text-primary, #1A1A1E)" }}>
+                  {formatCurrency(currentBalance)}
+                </div>
+                <span style={{ fontSize: "0.725rem", color: "#6B6B72", fontWeight: 500 }}>
+                  Across active accounts
+                </span>
+              </div>
+
+              {/* Card 2: Monthly Income */}
+              <div
+                style={{
+                  borderRadius: "16px",
+                  background: "var(--color-bg, #F8FAFC)",
+                  border: "1px solid var(--color-border, #E2E8F0)",
+                  borderLeft: "4px solid #2E9E6D",
+                  padding: "1.25rem",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.02)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", color: "#6B6B72", textTransform: "uppercase" }}>
+                    MONTHLY INCOME
+                  </span>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "8px", backgroundColor: "#E6F4EA", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <TrendingUp size={16} color="#2E9E6D" />
+                  </div>
+                </div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--color-text-primary, #1A1A1E)" }}>
+                  {formatCurrency(monthlyIncome)}
+                </div>
+                <span style={{ fontSize: "0.725rem", color: "#2E9E6D", fontWeight: 600 }}>
+                  ↑ Verified Inflow
+                </span>
+              </div>
+
+              {/* Card 3: Monthly Expenses */}
+              <div
+                style={{
+                  borderRadius: "16px",
+                  background: "var(--color-bg, #F8FAFC)",
+                  border: "1px solid var(--color-border, #E2E8F0)",
+                  borderLeft: "4px solid #D65A5A",
+                  padding: "1.25rem",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.02)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", color: "#6B6B72", textTransform: "uppercase" }}>
+                    MONTHLY EXPENSES
+                  </span>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "8px", backgroundColor: "#FCE8E6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <TrendingDown size={16} color="#D65A5A" />
+                  </div>
+                </div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--color-text-primary, #1A1A1E)" }}>
+                  {formatCurrency(displayExpense)}
+                </div>
+                <span style={{ fontSize: "0.725rem", color: "#D65A5A", fontWeight: 600 }}>
+                  ↓ Tracked Spending
+                </span>
+              </div>
+
+              {/* Card 4: Net Savings Rate */}
+              <div
+                style={{
+                  borderRadius: "16px",
+                  background: "var(--color-bg, #F8FAFC)",
+                  border: "1px solid var(--color-border, #E2E8F0)",
+                  borderLeft: "4px solid #3EC3D5",
+                  padding: "1.25rem",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.02)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", color: "#6B6B72", textTransform: "uppercase" }}>
+                    SAVINGS RATE
+                  </span>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "8px", backgroundColor: "rgba(62, 195, 213, 0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Sparkles size={16} color="#3EC3D5" />
+                  </div>
+                </div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "var(--color-text-primary, #1A1A1E)" }}>
+                  {monthlyIncome > 0 ? `${Math.max(0, Math.round(((monthlyIncome - displayExpense) / monthlyIncome) * 100))}%` : "0%"}
+                </div>
+                <span style={{ fontSize: "0.725rem", color: "#0891B2", fontWeight: 600 }}>
+                  Target: 20%+
+                </span>
+              </div>
+
+            </div>
+          </div>
+
         </div>
       </div>
 

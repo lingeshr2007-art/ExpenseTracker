@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import useStore from "../store/useStore";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext.jsx";
 import { authService } from "../services/authService";
 import NotificationBell from "./NotificationBell";
 import Toast from "./Toast";
@@ -37,22 +38,58 @@ const NAV_ITEMS = [
 
 function SidebarContent({ onNavigate, onToggleSidebar, sidebarHidden }) {
   const location = useLocation();
+
+  const handleCrossClick = (e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    if (onToggleSidebar) {
+      onToggleSidebar();
+    }
+    if (onNavigate) {
+      onNavigate();
+    }
+  };
+
   return (
     <>
-      {/* Logo Header */}
-      <div className="logo" style={{ display: "flex", alignItems: "center", gap: "0.625rem", width: "100%" }}>
-        <img
-          src="/nidhitrack-logo.png"
-          alt="NidhiTrack"
+      {/* Logo Header with Top-Right Cross Symbol */}
+      <div className="logo" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+          <img
+            src="/nidhitrack-logo.png"
+            alt="NidhiTrack"
+            style={{
+              width: "36px",
+              height: "36px",
+              objectFit: "contain",
+              borderRadius: "6px",
+              flexShrink: 0,
+            }}
+          />
+          <span className="logo-text">NidhiTrack</span>
+        </div>
+
+        <button
+          className="sidebar-cross-btn"
+          onClick={handleCrossClick}
+          title="Collapse menu / Hide names"
+          aria-label="Hide menu names"
           style={{
-            width: "36px",
-            height: "36px",
-            objectFit: "contain",
-            borderRadius: "6px",
-            flexShrink: 0,
+            background: "transparent",
+            border: "none",
+            color: "#94A3B8",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0.35rem",
+            borderRadius: "0.375rem",
+            transition: "all 0.2s ease"
           }}
-        />
-        <span className="logo-text">NidhiTrack</span>
+        >
+          <FaXmark size={18} />
+        </button>
       </div>
 
       {/* Nav */}
@@ -85,20 +122,23 @@ export default function Layout() {
   const navigate = useNavigate();
   const showToast = useStore((state) => (state.toast ? state.showToast : null));
   const appContext = useApp();
+  const { logout: authLogout } = useAuth();
   const { theme, toggleTheme, sidebarHidden, toggleSidebar, getTotals, getMonthlyExpense, budget, fetchFromApi } = useStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
-  const handleLogout = (e) => {
+  const handleLogout = async (e) => {
     if (e) {
       if (e.preventDefault) e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
     }
     try {
+      if (authLogout) await authLogout();
       authService.logout();
       if (appContext && typeof appContext.logout === "function") {
         appContext.logout();
       }
+      useStore.getState().clearStore();
       localStorage.clear();
       sessionStorage.clear();
     } catch (err) {
@@ -119,10 +159,10 @@ export default function Layout() {
   const overIncome = totals.expense > totals.income;
   const overBudget = budget > 0 && monthlyExpense > budget;
 
-  // Apply theme to DOM
+  // Always enforce clean light mode
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [theme]);
+    document.documentElement.classList.remove("dark");
+  }, []);
 
   // Close mobile nav on route change
   useEffect(() => {
@@ -179,17 +219,30 @@ export default function Layout() {
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             {/* Mobile Navigation Toggle */}
             <button
-              className="btn btn-icon btn-secondary mobile-nav-btn"
-              style={{ display: "none" }}
+              className="btn btn-icon mobile-nav-btn"
+              style={{
+                display: "none",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "36px",
+                height: "36px",
+                borderRadius: "0.625rem",
+                backgroundColor: "#F1F5F9",
+                border: "1px solid #E2E8F0",
+                color: "#4F46E5",
+                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.05)",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
             >
-              <FaBars size={18} />
+              <FaBars size={18} color="#4F46E5" />
             </button>
 
             {/* Desktop Hide/Unhide Menu Bar Button (Icon-only) */}
             <button
-              className="btn btn-icon btn-secondary desktop-toggle-menu-btn"
+              className="btn btn-icon desktop-toggle-menu-btn"
               onClick={toggleSidebar}
               title={sidebarHidden ? "Expand Menu (Ctrl+B)" : "Collapse Menu (Ctrl+B)"}
               aria-label={sidebarHidden ? "Expand Menu" : "Collapse Menu"}
@@ -200,11 +253,15 @@ export default function Layout() {
                 width: "36px",
                 height: "36px",
                 borderRadius: "0.625rem",
+                backgroundColor: "#F1F5F9",
+                border: "1px solid #E2E8F0",
+                color: "#4F46E5",
+                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.05)",
                 cursor: "pointer",
                 transition: "all 0.2s ease"
               }}
             >
-              {sidebarHidden ? <FaAnglesRight size={16} /> : <FaAnglesLeft size={16} />}
+              <FaBars size={18} color="#4F46E5" />
             </button>
 
             <h1 style={{ fontSize: "1rem", fontWeight: 700 }}>{pageTitle}</h1>
@@ -212,14 +269,6 @@ export default function Layout() {
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <NotificationBell />
-            <button
-              className="btn btn-icon btn-secondary"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-            >
-              {theme === "light" ? <FaMoon size={16} /> : <FaSun size={16} />}
-            </button>
             <NavLink
               to="/profile"
               className="btn btn-icon btn-secondary"

@@ -205,9 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return localStorage.getItem("premium_currency") || "INR";
   });
 
-  const [theme, setThemeState] = useState<"light" | "dark">(() => {
-    return (localStorage.getItem("premium_theme") as "light" | "dark") || "light";
-  });
+  const [theme] = useState<"light" | "dark">("light");
 
   const [language, setLanguageState] = useState<string>(() => {
     return localStorage.getItem("premium_language") || "English";
@@ -219,8 +217,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [user, setUser] = useState<User | null>(() => {
+    const rawActive = localStorage.getItem("myfinpal_active_user");
+    if (rawActive) {
+      try {
+        const parsed = JSON.parse(rawActive);
+        if (parsed && parsed.name) {
+          return { id: parsed.id || "user-1", email: parsed.email || "", name: parsed.name, avatar: "" };
+        }
+      } catch (e) { /* ignore */ }
+    }
     const raw = localStorage.getItem("premium_user");
-    return raw ? JSON.parse(raw) : { id: "user-1", email: "guest@example.com", name: "Alex Mercer", avatar: "" };
+    return raw ? JSON.parse(raw) : null;
   });
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -329,9 +336,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addNotification("success", `App currency set to ${curr}`);
   };
 
-  const setTheme = (th: "light" | "dark") => {
-    setThemeState(th);
-    localStorage.setItem("premium_theme", th);
+  const setTheme = (_th: "light" | "dark") => {
+    localStorage.setItem("premium_theme", "light");
   };
 
   const setLanguage = (lang: string) => {
@@ -593,7 +599,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.budgets) setBudgets(data.budgets);
         if (data.goals) setGoals(data.goals);
         if (data.currency) setCurrencyState(data.currency);
-        if (data.theme) setThemeState(data.theme);
         if (data.language) setLanguageState(data.language);
         addNotification("success", "Backup database restored successfully!");
         return true;

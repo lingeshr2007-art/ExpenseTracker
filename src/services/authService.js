@@ -90,8 +90,7 @@ export const authService = {
       let foundUser = users.find(
         (u) =>
           u.email.toLowerCase() === cleanEmail ||
-          u.name.toLowerCase() === cleanId ||
-          u.name.toLowerCase().startsWith(cleanId)
+          u.name.toLowerCase() === cleanId
       );
 
       if (!foundUser) {
@@ -345,18 +344,20 @@ export const authService = {
     const cleanEmail = cleanId.includes("@") ? cleanId : (cleanId === "suresh" ? "suresh@myfinpal.com" : `${cleanId}@myfinpal.com`);
 
     try {
-      const res = await api.login(cleanEmail, cleanPass);
+      const res = await api.login(cleanId, cleanPass);
       localStorage.setItem(SESSION_TOKEN_KEY, res.token);
       localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.user));
       return res;
     } catch (apiErr) {
+      if (apiErr.message && !apiErr.message.includes("Network request failed") && !apiErr.message.includes("Failed to fetch") && !apiErr.message.includes("Unavailable")) {
+        throw apiErr;
+      }
       // Local fallback mode
       const users = loadUsersDB();
       let foundUser = users.find(
         (u) =>
           u.email.toLowerCase() === cleanEmail ||
-          u.name.toLowerCase() === cleanId ||
-          u.name.toLowerCase().startsWith(cleanId)
+          u.name.toLowerCase() === cleanId
       );
 
       if (!foundUser) {
@@ -647,6 +648,9 @@ export const authService = {
    * Log out and clear session
    */
   logout() {
+    try {
+      fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    } catch (e) {}
     localStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(ACTIVE_USER_KEY);
     localStorage.removeItem("premium_user");

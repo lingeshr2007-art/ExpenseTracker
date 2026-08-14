@@ -115,7 +115,7 @@ export default function LoginPage() {
     try {
       await loginWithPassword(cleanId, cleanPass);
       setIsLoading(false);
-      toast.success("Welcome back! Signed in successfully 🎉");
+      toast.success("Welcome back! Signed in successfully.");
       navigate("/dashboard");
     } catch (err) {
       setIsLoading(false);

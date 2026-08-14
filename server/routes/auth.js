@@ -49,7 +49,7 @@ router.post("/signup", async (req, res) => {
       [userId, cleanName, cleanEmail, passwordHash, "email", memberSince, "Premium"]
     );
 
-    const userPayload = { id: userId, name: cleanName, email: cleanEmail, memberSince, accountType: "Premium" };
+    const userPayload = { id: userId, _id: userId, name: cleanName, email: cleanEmail, memberSince, accountType: "Premium" };
     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: "7d" });
 
     return res.status(201).json({
@@ -66,17 +66,20 @@ router.post("/signup", async (req, res) => {
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const cleanEmail = (email || "").trim().toLowerCase();
+    const { email, password, identifier } = req.body;
+    const inputStr = (email || identifier || "").trim().toLowerCase();
     const cleanPass = (password || "").trim();
 
-    if (!cleanEmail || !cleanPass) {
-      return res.status(400).json({ error: "Email address and password are required." });
+    if (!inputStr || !cleanPass) {
+      return res.status(400).json({ error: "Username or email address and password are required." });
     }
 
-    const user = await getOne("SELECT * FROM users WHERE email = ?", [cleanEmail]);
+    const user = await getOne(
+      "SELECT * FROM users WHERE LOWER(email) = ? OR LOWER(name) = ? OR id = ? OR LOWER(email) LIKE ? OR LOWER(name) LIKE ?",
+      [inputStr, inputStr, inputStr, `${inputStr}@%`, `${inputStr}%`]
+    );
     if (!user) {
-      return res.status(400).json({ error: "No account found with this email address." });
+      return res.status(400).json({ error: "No account found with this username or email address." });
     }
 
     const match = await bcrypt.compare(cleanPass, user.password_hash);
@@ -86,6 +89,7 @@ router.post("/login", async (req, res) => {
 
     const userPayload = {
       id: user.id,
+      _id: user.id,
       name: user.name,
       email: user.email,
       memberSince: user.member_since || "Jan 2026",
@@ -94,6 +98,13 @@ router.post("/login", async (req, res) => {
     };
 
     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: "7d" });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     return res.json({
       message: "Login successful!",
@@ -104,6 +115,12 @@ router.post("/login", async (req, res) => {
     console.error("Login error:", err);
     return res.status(500).json({ error: "Internal server error during login." });
   }
+});
+
+// POST /api/auth/logout
+router.post("/logout", (req, res) => {
+  res.clearCookie("token");
+  return res.json({ message: "Logged out successfully." });
 });
 
 // GET /api/auth/me
