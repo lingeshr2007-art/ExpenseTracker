@@ -22,7 +22,7 @@ const DEFAULT_ALLOCATIONS = [
 ];
 
 export default function BudgetPage() {
-  const { budget, setBudget, rechargeBudget, getMonthlyExpense, showToast } =
+  const { budget, setBudget, rechargeBudget, getMonthlyExpense, showToast, transactions } =
     useStore();
   const monthlyExpense = getMonthlyExpense();
   const [inputValue, setInputValue] = useState(budget.toString());
@@ -36,6 +36,44 @@ export default function BudgetPage() {
       return DEFAULT_ALLOCATIONS;
     }
   });
+
+  const safeTx = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
+
+  const getCategorySpent = (categoryName, id) => {
+    const normTarget = (categoryName || "").toLowerCase();
+    
+    return safeTx
+      .filter((t) => {
+        if (!t || t.type !== "expense") return false;
+        const cat = (t.category || "").toLowerCase();
+        if (!cat) return false;
+
+        if (cat === normTarget) return true;
+        if (normTarget.includes(cat) || cat.includes(normTarget)) return true;
+
+        if (id === "food" || normTarget.includes("food")) {
+          return cat.includes("food") || cat.includes("dining") || cat.includes("grocery") || cat.includes("restaurant");
+        }
+        if (id === "housing" || normTarget.includes("housing")) {
+          return cat.includes("housing") || cat.includes("rent") || cat.includes("mortgage") || cat.includes("home");
+        }
+        if (id === "shopping" || normTarget.includes("shopping")) {
+          return cat.includes("shopping") || cat.includes("lifestyle") || cat.includes("cloth") || cat.includes("store");
+        }
+        if (id === "transport" || normTarget.includes("transport")) {
+          return cat.includes("transport") || cat.includes("travel") || cat.includes("cab") || cat.includes("fuel") || cat.includes("bus");
+        }
+        if (id === "bills" || normTarget.includes("bills")) {
+          return cat.includes("bill") || cat.includes("util") || cat.includes("electricity") || cat.includes("water") || cat.includes("phone") || cat.includes("internet");
+        }
+        if (id === "savings" || normTarget.includes("savings")) {
+          return cat.includes("save") || cat.includes("saving") || cat.includes("emergency") || cat.includes("invest");
+        }
+
+        return false;
+      })
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  };
 
   const handlePctChange = (id, newPct) => {
     const updated = allocations.map((item) =>
@@ -398,15 +436,26 @@ export default function BudgetPage() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
               {allocations.map((item) => {
+                const spent = getCategorySpent(item.name, item.id);
                 const allocated = Math.round((budget * item.pct) / 100);
+                const spentPctOfAllocated = allocated > 0 ? Math.min(100, Math.round((spent / allocated) * 100)) : (spent > 0 ? 100 : 0);
+                const isOverCategory = allocated > 0 && spent > allocated;
+
                 return (
                   <div key={item.id} style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.825rem", fontWeight: 600 }}>
-                      <span style={{ color: "var(--color-text-primary)" }}>{item.name}</span>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ color: "var(--color-text-primary)" }}>{item.name}</span>
+                        <span style={{ fontSize: "0.725rem", color: isOverCategory ? "#FF5460" : "var(--color-text-muted)", fontWeight: 500 }}>
+                          {allocated > 0 
+                            ? `Spent: ${formatCurrency(spent)} of ${formatCurrency(allocated)} cap` 
+                            : `Spent: ${formatCurrency(spent)}`}
+                        </span>
+                      </div>
                       
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <span style={{ color: "var(--color-text-primary)", fontWeight: 700 }}>
-                          {formatCurrency(allocated)}
+                        <span style={{ color: isOverCategory ? "#FF5460" : "var(--color-text-primary)", fontWeight: 800, fontSize: "0.9rem" }}>
+                          {formatCurrency(spent)}
                         </span>
                         
                         <select
@@ -438,9 +487,9 @@ export default function BudgetPage() {
                     <div style={{ width: "100%", height: "7px", backgroundColor: "rgba(148, 163, 184, 0.15)", borderRadius: "999px", overflow: "hidden" }}>
                       <div
                         style={{
-                          width: `${Math.min(100, item.pct)}%`,
+                          width: `${allocated > 0 ? spentPctOfAllocated : (spent > 0 ? 100 : item.pct)}%`,
                           height: "100%",
-                          backgroundColor: item.color,
+                          backgroundColor: isOverCategory ? "#FF5460" : item.color,
                           borderRadius: "999px",
                           transition: "width 0.3s ease"
                         }}

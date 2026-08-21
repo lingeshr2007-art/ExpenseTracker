@@ -63,6 +63,70 @@ router.post("/signup", async (req, res) => {
   }
 });
 
+// POST /api/auth/google
+router.post("/google", async (req, res) => {
+  try {
+    const { email, name } = req.body;
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanName = (name || "").trim() || (cleanEmail.includes("@") ? cleanEmail.split("@")[0] : "Google User");
+
+    if (!cleanEmail || !isValidEmail(cleanEmail)) {
+      return res.status(400).json({ error: "Please provide a valid Google email address." });
+    }
+
+    let user = await getOne("SELECT * FROM users WHERE LOWER(email) = ?", [cleanEmail]);
+
+    if (!user) {
+      const userId = `usr_google_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const dummyPass = await bcrypt.hash(`google_auth_${Date.now()}_${Math.random()}`, 10);
+      const memberSince = `${new Date().toLocaleString("en-US", { month: "short" })} 2026`;
+
+      await run(
+        `INSERT INTO users (id, name, email, password_hash, provider, member_since, account_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [userId, cleanName, cleanEmail, dummyPass, "google", memberSince, "Premium"]
+      );
+
+      user = {
+        id: userId,
+        name: cleanName,
+        email: cleanEmail,
+        member_since: memberSince,
+        account_type: "Premium",
+        provider: "google",
+      };
+    }
+
+    const userPayload = {
+      id: user.id,
+      _id: user.id,
+      name: user.name,
+      email: user.email,
+      memberSince: user.member_since || "Jan 2026",
+      accountType: user.account_type || "Premium",
+      provider: "google",
+    };
+
+    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: "7d" });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.json({
+      message: "Google authentication successful!",
+      token,
+      user: userPayload,
+    });
+  } catch (err) {
+    console.error("Google auth error:", err);
+    return res.status(500).json({ error: "Internal server error during Google authentication." });
+  }
+});
+
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
@@ -171,9 +235,8 @@ router.post("/forgot-password", async (req, res) => {
     );
 
     return res.json({
-      message: `Verification code sent to ${cleanEmail}. (Demo OTP: ${otpCode})`,
+      message: `Verification code sent to ${cleanEmail}.`,
       resetToken,
-      otpCode,
     });
   } catch (err) {
     return res.status(500).json({ error: "Failed to request password reset." });
@@ -211,111 +274,131 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
-// POST /api/auth/login-otp/send
-router.post("/login-otp/send", async (req, res) => {
+// Helper: Common OTP Send Function
+async function handleSendOtp(req, res) {
   try {
     const { email, password } = req.body;
     const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanPass = (password || "").trim();
 
-    if (!cleanEmail || !cleanPass) {
-      return res.status(400).json({ error: "Email address and password are required." });
+    if (!cleanEmail || !isValidEmail(cleanEmail)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
     }
 
-    const user = await getOne("SELECT * FROM users WHERE email = ?", [cleanEmail]);
-    if (!user) {
-      return res.status(400).json({ error: "No account found with this email address." });
-    }
-
-    const match = await bcrypt.compare(cleanPass, user.password_hash);
-    if (!match) {
-      return res.status(400).json({ error: "Incorrect password. Please check your credentials." });
-    }
-
-    // Credentials valid -> Generate 6-digit OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const otpSessionId = `otp_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
 
     // Clean old OTP sessions for this email
-    await run("DELETE FROM login_otps WHERE email = ?", [user.email]);
+    await run("DELETE FROM login_otps WHERE email = ?", [cleanEmail]);
 
     await run(
       `INSERT INTO login_otps (id, email, otp_code, expires_at, attempts)
        VALUES (?, ?, ?, ?, 0)`,
-      [otpSessionId, user.email, otpCode, expiresAt]
+      [otpSessionId, cleanEmail, otpCode, expiresAt]
     );
 
-    // Send real OTP email to user's registered email address!
+    // Send real OTP email to recipient's email address!
     try {
-      await sendOtpEmail(user.email, otpCode);
+      await sendOtpEmail(cleanEmail, otpCode);
     } catch (mailErr) {
       console.error("Could not deliver OTP email:", mailErr.message);
     }
 
     return res.json({
-      message: `Real-time OTP verification code sent to your registered email: ${user.email}`,
+      message: `Real-time OTP verification code sent to ${cleanEmail}`,
       otpSessionId,
-      email: user.email,
+      email: cleanEmail,
+      otpCode,
     });
   } catch (err) {
-
-    console.error("Error sending login OTP:", err);
-    return res.status(500).json({ error: "Failed to send real-time login OTP." });
+    console.error("Error sending OTP:", err);
+    return res.status(500).json({ error: "Failed to send real-time OTP code." });
   }
-});
+}
 
-// POST /api/auth/login-otp/verify
-router.post("/login-otp/verify", async (req, res) => {
+// Helper: Common OTP Verify Function
+async function handleVerifyOtp(req, res) {
   try {
-    const { email, otpSessionId, otpCode } = req.body;
+    const { email, otpSessionId, otpCode, otp } = req.body;
     const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanSessionId = (otpSessionId || "").trim();
-    const cleanCode = (otpCode || "").trim();
+    const cleanCode = (otpCode || otp || "").trim();
 
-    if (!cleanEmail || !cleanSessionId || !cleanCode) {
-      return res.status(400).json({ error: "Email, session ID, and OTP code are required." });
+    if (!cleanEmail || !cleanCode) {
+      return res.status(400).json({ error: "Email and 6-digit OTP code are required." });
     }
 
-    const record = await getOne("SELECT * FROM login_otps WHERE id = ? AND email = ?", [cleanSessionId, cleanEmail]);
+    // Find record by OTP code or session ID
+    let record = null;
+    if (otpSessionId) {
+      record = await getOne("SELECT * FROM login_otps WHERE id = ? AND email = ?", [otpSessionId, cleanEmail]);
+    }
+    if (!record) {
+      record = await getOne("SELECT * FROM login_otps WHERE email = ? AND otp_code = ?", [cleanEmail, cleanCode]);
+    }
     if (!record) {
       return res.status(400).json({ error: "Invalid or expired OTP session. Please request a new code." });
     }
 
     if (Date.now() > record.expires_at) {
-      await run("DELETE FROM login_otps WHERE id = ?", [cleanSessionId]);
+      await run("DELETE FROM login_otps WHERE id = ?", [record.id]);
       return res.status(400).json({ error: "OTP code has expired. Please click Resend Code." });
     }
 
     if (record.attempts >= 5) {
-      await run("DELETE FROM login_otps WHERE id = ?", [cleanSessionId]);
+      await run("DELETE FROM login_otps WHERE id = ?", [record.id]);
       return res.status(400).json({ error: "Too many failed attempts. Please request a new code." });
     }
 
     if (record.otp_code !== cleanCode) {
-      await run("UPDATE login_otps SET attempts = attempts + 1 WHERE id = ?", [cleanSessionId]);
+      await run("UPDATE login_otps SET attempts = attempts + 1 WHERE id = ?", [record.id]);
       return res.status(400).json({ error: "Incorrect 6-digit OTP code. Please double check." });
     }
 
-    // OTP Verified! Fetch User
-    const user = await getOne("SELECT * FROM users WHERE email = ?", [cleanEmail]);
-    if (!user) {
-      return res.status(404).json({ error: "User account not found." });
-    }
-
     // Clear used OTP record
-    await run("DELETE FROM login_otps WHERE id = ?", [cleanSessionId]);
+    await run("DELETE FROM login_otps WHERE id = ?", [record.id]);
+
+    // OTP Verified! Fetch or Create User (Auto Signup for new users)
+    let user = await getOne("SELECT * FROM users WHERE email = ?", [cleanEmail]);
+    if (!user) {
+      const userId = `usr_otp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const cleanName = cleanEmail.split("@")[0];
+      const dummyPass = await bcrypt.hash(`otp_user_${Date.now()}`, 10);
+      const memberSince = `${new Date().toLocaleString("en-US", { month: "short" })} 2026`;
+
+      await run(
+        `INSERT INTO users (id, name, email, password_hash, provider, member_since, account_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [userId, cleanName, cleanEmail, dummyPass, "otp", memberSince, "Premium"]
+      );
+
+      user = {
+        id: userId,
+        name: cleanName,
+        email: cleanEmail,
+        member_since: memberSince,
+        account_type: "Premium",
+        provider: "otp",
+      };
+    }
 
     const userPayload = {
       id: user.id,
+      _id: user.id,
       name: user.name,
       email: user.email,
       memberSince: user.member_since || "Jan 2026",
       accountType: user.account_type || "Premium",
-      provider: user.provider || "email",
+      provider: user.provider || "otp",
     };
 
     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: "7d" });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     return res.json({
       message: "OTP Verification successful! Logging in...",
@@ -323,28 +406,39 @@ router.post("/login-otp/verify", async (req, res) => {
       user: userPayload,
     });
   } catch (err) {
-    console.error("Error verifying login OTP:", err);
+    console.error("Error verifying OTP:", err);
     return res.status(500).json({ error: "Failed to verify OTP code." });
   }
-});
+}
 
-// POST /api/auth/login-otp/resend
-router.post("/login-otp/resend", async (req, res) => {
+// POST /api/auth/send-otp & /api/auth/login-otp/send
+router.post("/send-otp", handleSendOtp);
+router.post("/login-otp/send", handleSendOtp);
+
+// POST /api/auth/verify-otp & /api/auth/login-otp/verify
+router.post("/verify-otp", handleVerifyOtp);
+router.post("/login-otp/verify", handleVerifyOtp);
+
+// POST /api/auth/resend-otp & /api/auth/login-otp/resend
+async function handleResendOtp(req, res) {
   try {
     const { email, otpSessionId } = req.body;
     const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanSessionId = (otpSessionId || "").trim();
 
-    if (!cleanEmail || !cleanSessionId) {
-      return res.status(400).json({ error: "Email and session ID are required." });
+    if (!cleanEmail) {
+      return res.status(400).json({ error: "Email address is required." });
     }
 
     const newOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const newExpiresAt = Date.now() + 5 * 60 * 1000;
+    const newSessionId = otpSessionId || `otp_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    await run("DELETE FROM login_otps WHERE email = ?", [cleanEmail]);
 
     await run(
-      `UPDATE login_otps SET otp_code = ?, expires_at = ?, attempts = 0 WHERE id = ? AND email = ?`,
-      [newOtpCode, newExpiresAt, cleanSessionId, cleanEmail]
+      `INSERT INTO login_otps (id, email, otp_code, expires_at, attempts)
+       VALUES (?, ?, ?, ?, 0)`,
+      [newSessionId, cleanEmail, newOtpCode, newExpiresAt]
     );
 
     try {
@@ -355,12 +449,16 @@ router.post("/login-otp/resend", async (req, res) => {
 
     return res.json({
       message: `A new real-time verification code was sent to ${cleanEmail}`,
+      otpSessionId: newSessionId,
+      otpCode: newOtpCode,
     });
   } catch (err) {
-
     console.error("Error resending OTP:", err);
     return res.status(500).json({ error: "Failed to resend OTP code." });
   }
-});
+}
+
+router.post("/resend-otp", handleResendOtp);
+router.post("/login-otp/resend", handleResendOtp);
 
 export default router;

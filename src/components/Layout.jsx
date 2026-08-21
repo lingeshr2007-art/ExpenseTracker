@@ -127,19 +127,20 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
-  const handleLogout = async (e) => {
+  const handleLogout = (e) => {
     if (e) {
       if (e.preventDefault) e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
     }
     try {
-      if (authLogout) await authLogout();
+      if (authLogout) authLogout();
       authService.logout();
       if (appContext && typeof appContext.logout === "function") {
         appContext.logout();
       }
       useStore.getState().clearStore();
-      localStorage.clear();
+      localStorage.removeItem("myfinpal_session_token");
+      localStorage.removeItem("myfinpal_active_user");
       sessionStorage.clear();
     } catch (err) {
       console.error("Logout error:", err);
@@ -277,7 +278,7 @@ export default function Layout() {
                 width: "36px",
                 height: "36px",
                 borderRadius: "50%",
-                background: "#3EC3D5",
+                background: "#2563EB",
                 color: "#FFFFFF",
                 fontWeight: 700,
                 fontSize: "0.8rem",
@@ -285,7 +286,7 @@ export default function Layout() {
                 alignItems: "center",
                 justifyContent: "center",
                 textDecoration: "none",
-                boxShadow: "0 2px 8px rgba(62, 195, 213, 0.3)",
+                boxShadow: "0 2px 8px rgba(37, 99, 235, 0.3)",
               }}
             >
               <FaUser size={14} color="#FFFFFF" />

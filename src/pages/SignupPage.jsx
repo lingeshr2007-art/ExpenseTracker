@@ -14,11 +14,13 @@ import {
   ShieldCheck,
   TrendingUp,
   Sparkles,
+  KeyRound,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import useStore from "../store/useStore";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext.jsx";
 import { authService } from "../services/authService";
-import GoogleAuthModal from "../components/GoogleAuthModal";
 
 const FEATURE_SLIDES = [
   {
@@ -45,10 +47,15 @@ export default function SignupPage() {
   const navigate = useNavigate();
   const showToast = useStore((state) => (state.toast ? state.showToast : null));
   const appContext = useApp();
+  const { sendOtp } = useAuth();
+
+  // Mode: "password" (default) or "otp"
+  const [signupMode, setSignupMode] = useState("password");
 
   // Form state
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(true);
@@ -59,8 +66,10 @@ export default function SignupPage() {
   const [authError, setAuthError] = useState("");
   const [activeSlide, setActiveSlide] = useState(0);
 
-  // Google OAuth Modal state
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+  // Email Validator Helper
+  const isValidEmail = (str) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str).trim().toLowerCase());
+  };
 
   // Auto rotate slides
   useEffect(() => {
@@ -70,7 +79,8 @@ export default function SignupPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleSubmit = async (e) => {
+  // Submit Password Signup
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     setAuthError("");
 
@@ -90,6 +100,7 @@ export default function SignupPage() {
         appContext.login(res.user?.name || fullName, res.user?.email || `${username}@myfinpal.com`);
       }
 
+      toast.success("Account registered successfully! 🎉");
       if (showToast) showToast("Account registered successfully! 🎉");
 
       setTimeout(() => {
@@ -99,30 +110,40 @@ export default function SignupPage() {
       }, 700);
     } catch (err) {
       setIsLoading(false);
-      setAuthError(err.message || "Registration failed. Please try again.");
+      const errMsg = err.message || "Registration failed. Please try again.";
+      setAuthError(errMsg);
+      toast.error(errMsg);
     }
   };
 
-  const handleGoogleAccountSelected = (acct) => {
-    setIsGoogleModalOpen(false);
+  // Submit OTP Signup / Login
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+
+    const cleanEmail = (email || username || "").trim().toLowerCase();
+
+    if (!isValidEmail(cleanEmail)) {
+      setAuthError("Please enter a valid Gmail / Email address for OTP verification.");
+      return;
+    }
+
     setIsLoading(true);
 
-    authService
-      .googleAuth(acct.email, acct.name, acct.avatar)
-      .then((res) => {
-        setIsLoading(false);
-        setIsSuccess(true);
-
-        if (appContext && typeof appContext.login === "function") {
-          appContext.login(res.user.name, res.user.email);
-        }
-
-        if (showToast) showToast(`Signed up with Google as ${acct.name} ✓`);
-
-        setTimeout(() => {
-          navigate("/dashboard");
-        }, 700);
-      });
+    try {
+      const res = await sendOtp(cleanEmail);
+      setIsLoading(false);
+      toast.success(res.message || `Security OTP sent to ${cleanEmail}`);
+      navigate("/verify-otp", { state: { email: cleanEmail } });
+    } catch (err) {
+      setIsLoading(false);
+      const errMsg =
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to send OTP code. Please try again.";
+      setAuthError(errMsg);
+      toast.error(errMsg);
+    }
   };
 
   return (
@@ -193,6 +214,73 @@ export default function SignupPage() {
               </p>
             </div>
 
+            {/* Auth Method Toggle Tabs */}
+            <div
+              style={{
+                display: "flex",
+                backgroundColor: "#F4F4F6",
+                borderRadius: "10px",
+                padding: "3px",
+                marginBottom: "1.25rem",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupMode("password");
+                  setAuthError("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: "0.5rem",
+                  borderRadius: "8px",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  border: "none",
+                  backgroundColor: signupMode === "password" ? "#FFFFFF" : "transparent",
+                  color: signupMode === "password" ? "#1A1A1E" : "#6B6B72",
+                  boxShadow: signupMode === "password" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.4rem",
+                }}
+              >
+                <Lock size={14} />
+                <span>Password Signup</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupMode("otp");
+                  setAuthError("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: "0.5rem",
+                  borderRadius: "8px",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  border: "none",
+                  backgroundColor: signupMode === "otp" ? "#FFFFFF" : "transparent",
+                  color: signupMode === "otp" ? "#1A1A1E" : "#6B6B72",
+                  boxShadow: signupMode === "otp" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.4rem",
+                }}
+              >
+                <KeyRound size={14} />
+                <span>OTP Signup</span>
+              </button>
+            </div>
+
             {/* Inline Error Alert */}
             {authError && (
               <motion.div
@@ -217,146 +305,220 @@ export default function SignupPage() {
               </motion.div>
             )}
 
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-              {/* Full Name */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                <label style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#1A1A1E" }}>
-                  Full Name
-                </label>
-                <div style={{ position: "relative" }}>
-                  <User size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B72" }} />
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Lingesh R"
-                    style={{
-                      width: "100%",
-                      padding: "0.75rem 1rem 0.75rem 2.5rem",
-                      backgroundColor: "#FAFAFA",
-                      border: "1px solid #E8E8EA",
-                      borderRadius: "12px",
-                      fontSize: "0.85rem",
-                      fontWeight: 600,
-                      color: "#1A1A1E",
-                      outline: "none",
-                      boxSizing: "border-box",
-                    }}
-                  />
+            {/* ── FORM 1: Password Signup ── */}
+            {signupMode === "password" && (
+              <form onSubmit={handlePasswordSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+                {/* Full Name */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  <label style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#1A1A1E" }}>
+                    Full Name
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <User size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B72" }} />
+                    <input
+                      type="text"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Lingesh R"
+                      style={{
+                        width: "100%",
+                        padding: "0.75rem 1rem 0.75rem 2.5rem",
+                        backgroundColor: "#FAFAFA",
+                        border: "1px solid #E8E8EA",
+                        borderRadius: "12px",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        color: "#1A1A1E",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Username */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                <label style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#1A1A1E" }}>
-                  Username
-                </label>
-                <div style={{ position: "relative" }}>
-                  <User size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B72" }} />
-                  <input
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="e.g. Lingesh"
-                    style={{
-                      width: "100%",
-                      padding: "0.75rem 1rem 0.75rem 2.5rem",
-                      backgroundColor: "#FAFAFA",
-                      border: "1px solid #E8E8EA",
-                      borderRadius: "12px",
-                      fontSize: "0.85rem",
-                      fontWeight: 600,
-                      color: "#1A1A1E",
-                      outline: "none",
-                      boxSizing: "border-box",
-                    }}
-                  />
+                {/* Username */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  <label style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#1A1A1E" }}>
+                    Username
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <User size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B72" }} />
+                    <input
+                      type="text"
+                      required
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="e.g. Lingesh"
+                      style={{
+                        width: "100%",
+                        padding: "0.75rem 1rem 0.75rem 2.5rem",
+                        backgroundColor: "#FAFAFA",
+                        border: "1px solid #E8E8EA",
+                        borderRadius: "12px",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        color: "#1A1A1E",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Password */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                <label style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#1A1A1E" }}>
-                  Password
-                </label>
-                <div style={{ position: "relative" }}>
-                  <Lock size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B72" }} />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
-                    style={{
-                      width: "100%",
-                      padding: "0.75rem 2.5rem",
-                      backgroundColor: "#FAFAFA",
-                      border: "1px solid #E8E8EA",
-                      borderRadius: "12px",
-                      fontSize: "0.85rem",
-                      fontWeight: 600,
-                      color: "#1A1A1E",
-                      outline: "none",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6B72", cursor: "pointer" }}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
+                {/* Password */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  <label style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#1A1A1E" }}>
+                    Password
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <Lock size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B72" }} />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      style={{
+                        width: "100%",
+                        padding: "0.75rem 2.5rem",
+                        backgroundColor: "#FAFAFA",
+                        border: "1px solid #E8E8EA",
+                        borderRadius: "12px",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        color: "#1A1A1E",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6B72", cursor: "pointer" }}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Terms */}
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", color: "#6B6B72", fontSize: "0.78rem", fontWeight: 500 }}>
-                <input
-                  type="checkbox"
-                  checked={agreeTerms}
-                  onChange={(e) => setAgreeTerms(e.target.checked)}
-                  style={{ accentColor: "#4F5DED" }}
-                />
-                <span>I agree to the Terms of Service & Privacy Policy</span>
-              </label>
+                {/* Terms */}
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", color: "#6B6B72", fontSize: "0.78rem", fontWeight: 500 }}>
+                  <input
+                    type="checkbox"
+                    checked={agreeTerms}
+                    onChange={(e) => setAgreeTerms(e.target.checked)}
+                    style={{ accentColor: "#4F5DED" }}
+                  />
+                  <span>I agree to the Terms of Service & Privacy Policy</span>
+                </label>
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isLoading || isSuccess}
-                style={{
-                  width: "100%",
-                  padding: "0.85rem",
-                  background: "#4F5DED",
-                  color: "#FFFFFF",
-                  fontFamily: "'Space Grotesk', sans-serif",
-                  fontSize: "0.9rem",
-                  fontWeight: 700,
-                  borderRadius: "12px",
-                  border: "none",
-                  boxShadow: "0 6px 16px rgba(79, 93, 237, 0.25)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.5rem",
-                }}
-              >
-                {isLoading ? (
-                  <span>Registering Account...</span>
-                ) : isSuccess ? (
-                  <span>Account Created! Redirecting...</span>
-                ) : (
-                  <>
-                    <span>Create Account</span>
-                    <ArrowRight size={18} />
-                  </>
-                )}
-              </button>
-            </form>
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading || isSuccess}
+                  style={{
+                    width: "100%",
+                    padding: "0.85rem",
+                    background: "#4F5DED",
+                    color: "#FFFFFF",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: "0.9rem",
+                    fontWeight: 700,
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: "0 6px 16px rgba(79, 93, 237, 0.25)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {isLoading ? (
+                    <span>Registering Account...</span>
+                  ) : isSuccess ? (
+                    <span>Account Created! Redirecting...</span>
+                  ) : (
+                    <>
+                      <span>Create Account</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* ── FORM 2: Passwordless OTP Signup ── */}
+            {signupMode === "otp" && (
+              <form onSubmit={handleOtpSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  <label style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", color: "#1A1A1E" }}>
+                    Gmail / Email Address
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <Mail size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B72" }} />
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setAuthError("");
+                      }}
+                      placeholder="e.g. lingesh@gmail.com"
+                      style={{
+                        width: "100%",
+                        padding: "0.75rem 1rem 0.75rem 2.5rem",
+                        backgroundColor: "#FAFAFA",
+                        border: "1px solid #E8E8EA",
+                        borderRadius: "12px",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        color: "#1A1A1E",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <p style={{ fontSize: "0.78rem", color: "#6B6B72", lineHeight: 1.4 }}>
+                  We will send a 6-digit security OTP code to your Gmail address for instant account verification.
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={!isValidEmail(email) || isLoading}
+                  style={{
+                    width: "100%",
+                    padding: "0.85rem",
+                    background: isValidEmail(email) ? "#4F5DED" : "#A5B4FC",
+                    color: "#FFFFFF",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: "0.9rem",
+                    fontWeight: 700,
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: isValidEmail(email) ? "0 6px 16px rgba(79, 93, 237, 0.25)" : "none",
+                    cursor: isValidEmail(email) && !isLoading ? "pointer" : "not-allowed",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {isLoading ? (
+                    <span>Sending Security OTP...</span>
+                  ) : (
+                    <>
+                      <span>Send Verification OTP</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
           </div>
 
           <div style={{ textAlign: "center", fontSize: "0.825rem", color: "#6B6B72", marginTop: "0.5rem" }}>
@@ -414,13 +576,6 @@ export default function SignupPage() {
           </div>
         </div>
       </motion.div>
-
-      {/* Google OAuth Consent Modal */}
-      <GoogleAuthModal
-        isOpen={isGoogleModalOpen}
-        onClose={() => setIsGoogleModalOpen(false)}
-        onSelectAccount={handleGoogleAccountSelected}
-      />
     </div>
   );
 }

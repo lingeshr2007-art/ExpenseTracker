@@ -1,15 +1,20 @@
 // src/components/GoogleAuthModal.jsx
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, ShieldCheck, User } from "lucide-react";
+import { X, ShieldCheck, User, Plus, ArrowRight } from "lucide-react";
 
 export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSuccess }) {
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customEmail, setCustomEmail] = useState("");
+  const [customError, setCustomError] = useState("");
 
   if (!isOpen) return null;
 
   const ACCOUNTS = [
+    { name: "Lingesh R", email: "lingesh@gmail.com", avatar: "LR" },
     { name: "Suresh Kumar", email: "suresh@myfinpal.com", avatar: "SK" },
     { name: "Suresh (Personal)", email: "suresh.kumar@gmail.com", avatar: "S" },
   ];
@@ -24,7 +29,33 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSu
       if (typeof callback === "function") {
         callback(account);
       }
-    }, 1000);
+    }, 900);
+  };
+
+  const handleCustomSubmit = (e) => {
+    e.preventDefault();
+    setCustomError("");
+
+    const name = customName.trim();
+    const email = customEmail.trim().toLowerCase();
+
+    if (!name || name.length < 2) {
+      setCustomError("Please enter your name.");
+      return;
+    }
+    if (!email || !email.includes("@")) {
+      setCustomError("Please enter a valid Google email address.");
+      return;
+    }
+
+    const initials = name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+
+    handleChoose({ name, email, avatar: initials || "G" });
   };
 
   return (
@@ -72,10 +103,10 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSu
               </svg>
               <div>
                 <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#111827", margin: 0 }}>
-                  Sign in with Google
+                  Sign up with Google
                 </h3>
                 <p style={{ fontSize: "0.78rem", color: "#6B7280", margin: "2px 0 0" }}>
-                  Choose an account to continue to <strong style={{ color: "#3EC3D5" }}>NidhiTrack</strong>
+                  Choose an account to continue to <strong style={{ color: "#4F5DED" }}>NidhiTrack</strong>
                 </p>
               </div>
             </div>
@@ -90,7 +121,7 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSu
 
           <div style={{ height: "1px", backgroundColor: "#E5E7EB", margin: "1rem 0" }} />
 
-          {/* Account Selection List */}
+          {/* Account Selection List / Form */}
           {isAuthenticating ? (
             <div style={{ textAlign: "center", padding: "2rem 1rem" }}>
               <div style={{ display: "inline-block", marginBottom: "1rem" }}>
@@ -106,6 +137,92 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSu
                 Verifying Google identity token for {selectedEmail}...
               </p>
             </div>
+          ) : showCustomForm ? (
+            <form onSubmit={handleCustomSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              {customError && (
+                <div style={{ padding: "0.5rem 0.75rem", borderRadius: "8px", backgroundColor: "#FCE8E6", color: "#D65A5A", fontSize: "0.78rem", fontWeight: 600 }}>
+                  {customError}
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                <label style={{ fontSize: "0.725rem", fontWeight: 700, color: "#374151" }}>Your Full Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Lingesh R"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  style={{
+                    padding: "0.65rem 0.85rem",
+                    borderRadius: "10px",
+                    border: "1px solid #D1D5DB",
+                    fontSize: "0.85rem",
+                    fontWeight: 500,
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                <label style={{ fontSize: "0.725rem", fontWeight: 700, color: "#374151" }}>Google Email Address</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. lingesh@gmail.com"
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  style={{
+                    padding: "0.65rem 0.85rem",
+                    borderRadius: "10px",
+                    border: "1px solid #D1D5DB",
+                    fontSize: "0.85rem",
+                    fontWeight: 500,
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomForm(false)}
+                  style={{
+                    flex: 1,
+                    padding: "0.65rem",
+                    borderRadius: "10px",
+                    border: "1px solid #D1D5DB",
+                    backgroundColor: "#FFFFFF",
+                    fontSize: "0.825rem",
+                    fontWeight: 600,
+                    color: "#4B5563",
+                    cursor: "pointer",
+                  }}
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1.5,
+                    padding: "0.65rem",
+                    borderRadius: "10px",
+                    border: "none",
+                    backgroundColor: "#4F5DED",
+                    fontSize: "0.825rem",
+                    fontWeight: 700,
+                    color: "#FFFFFF",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.35rem",
+                  }}
+                >
+                  <span>Continue</span>
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            </form>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
               {ACCOUNTS.map((acc) => (
@@ -133,7 +250,7 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSu
                       width: "36px",
                       height: "36px",
                       borderRadius: "50%",
-                      backgroundColor: "#3EC3D5",
+                      backgroundColor: "#4F5DED",
                       color: "#FFFFFF",
                       fontWeight: 700,
                       fontSize: "0.85rem",
@@ -151,6 +268,29 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSu
                 </button>
               ))}
 
+              {/* Custom account trigger */}
+              <button
+                onClick={() => setShowCustomForm(true)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  width: "100%",
+                  padding: "0.75rem 0.875rem",
+                  borderRadius: "12px",
+                  border: "1px dashed #CBD5E1",
+                  backgroundColor: "#FFFFFF",
+                  cursor: "pointer",
+                  color: "#4F5DED",
+                  fontSize: "0.825rem",
+                  fontWeight: 600,
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <Plus size={18} />
+                <span>Use another Google account</span>
+              </button>
+
               <div
                 style={{
                   display: "flex",
@@ -163,7 +303,7 @@ export default function GoogleAuthModal({ isOpen, onClose, onSelectAccount, onSu
                   borderTop: "1px solid #F3F4F6",
                 }}
               >
-                <ShieldCheck size={16} color="#3EC3D5" />
+                <ShieldCheck size={16} color="#4F5DED" />
                 <span>To continue, Google will share your name and email with NidhiTrack.</span>
               </div>
             </div>

@@ -207,7 +207,17 @@ export const authService = {
     if (!cleanEmail) throw new Error("Email address is required.");
 
     try {
-      const res = await api.sendOtp ? await api.sendOtp(cleanEmail) : await api.sendLoginOtp(cleanEmail, "default_pass");
+      const res = await api.sendOtp(cleanEmail);
+      if (res && res.otpSessionId) {
+        const otpSess = {
+          id: res.otpSessionId,
+          email: cleanEmail,
+          otpCode: res.otpCode,
+          expiresAt: Date.now() + 5 * 60 * 1000,
+          attempts: 0,
+        };
+        localStorage.setItem("myfinpal_login_otp_sess", JSON.stringify(otpSess));
+      }
       return res;
     } catch (e) {
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -224,6 +234,7 @@ export const authService = {
         message: `Security OTP code sent to ${cleanEmail}`,
         otpSessionId,
         email: cleanEmail,
+        otpCode,
       };
     }
   },
@@ -449,48 +460,56 @@ export const authService = {
   /**
    * Authenticate via Google OAuth 2.0
    */
-  loginWithGoogle(selectedEmail = "suresh@gmail.com", selectedName = "Suresh Kumar") {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const cleanEmail = selectedEmail.toLowerCase();
-        const users = loadUsersDB();
-        let foundUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+  async loginWithGoogle(selectedEmail = "suresh@gmail.com", selectedName = "Suresh Kumar", avatar = "") {
+    const cleanEmail = (selectedEmail || "").trim().toLowerCase();
+    const cleanName = (selectedName || "").trim() || (cleanEmail.includes("@") ? cleanEmail.split("@")[0] : "Google User");
 
-        if (!foundUser) {
-          foundUser = {
-            id: `usr_google_${Date.now()}`,
-            name: selectedName,
-            email: cleanEmail,
-            passwordHash: hashPassword("GoogleOAuth2SecurePass"),
-            provider: "google",
-            memberSince: `${new Date().toLocaleString("en-US", { month: "short" })} 2026`,
-            accountType: "Premium",
-            createdAt: new Date().toISOString(),
-          };
-          users.push(foundUser);
-          saveUsersDB(users);
-        }
+    try {
+      const res = await api.googleAuth(cleanEmail, cleanName, avatar);
+      if (res && res.token) {
+        localStorage.setItem(SESSION_TOKEN_KEY, res.token);
+        localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.user));
+      }
+      return res;
+    } catch (apiErr) {
+      // Local fallback mode if API is unreachable
+      const users = loadUsersDB();
+      let foundUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
 
-        const token = generateSessionToken(foundUser);
-        const activeUser = {
-          id: foundUser.id,
-          name: foundUser.name,
-          email: foundUser.email,
-          memberSince: foundUser.memberSince,
-          accountType: foundUser.accountType,
+      if (!foundUser) {
+        foundUser = {
+          id: `usr_google_${Date.now()}`,
+          name: cleanName,
+          email: cleanEmail,
+          passwordHash: hashPassword("GoogleOAuth2SecurePass"),
           provider: "google",
+          memberSince: `${new Date().toLocaleString("en-US", { month: "short" })} 2026`,
+          accountType: "Premium",
+          createdAt: new Date().toISOString(),
         };
+        users.push(foundUser);
+        saveUsersDB(users);
+      }
 
-        localStorage.setItem(SESSION_TOKEN_KEY, token);
-        localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(activeUser));
+      const token = generateSessionToken(foundUser);
+      const activeUser = {
+        id: foundUser.id,
+        name: foundUser.name,
+        email: foundUser.email,
+        memberSince: foundUser.memberSince || "Jan 2026",
+        accountType: foundUser.accountType || "Premium",
+        provider: "google",
+      };
 
-        resolve({ user: activeUser, token });
-      }, 900);
-    });
+      localStorage.setItem(SESSION_TOKEN_KEY, token);
+      localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(activeUser));
+
+      return { user: activeUser, token };
+    }
   },
 
   googleAuth(email, name, avatar) {
-    return this.loginWithGoogle(email, name);
+    return this.loginWithGoogle(email, name, avatar);
   },
 
   /**

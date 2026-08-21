@@ -37,9 +37,8 @@ export default function VerifyOtpPage() {
     }
   }, [email, navigate]);
 
-  // 6 Digits State
+  // 6 Digits State (empty on load, user must type code from email inbox)
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
-  const [demoOTP, setDemoOTP] = useState(initialOtpCode);
   
   // 5 Min Expiry Timer (300s)
   const [expiryTimer, setExpiryTimer] = useState(300);
@@ -60,12 +59,7 @@ export default function VerifyOtpPage() {
     useRef(null),
   ];
 
-  // Auto-fill digits if demoOTP is provided
-  useEffect(() => {
-    if (initialOtpCode && initialOtpCode.length === 6) {
-      setOtpDigits(initialOtpCode.split(""));
-    }
-  }, [initialOtpCode]);
+
 
   // 5 Min Expiry Timer Countdown
   useEffect(() => {
@@ -214,13 +208,8 @@ export default function VerifyOtpPage() {
       setIsResending(false);
       setExpiryTimer(300);
       setResendTimer(60);
-      if (res?.otpCode) {
-        setDemoOTP(res.otpCode);
-        setOtpDigits(res.otpCode.split(""));
-      } else {
-        setOtpDigits(["", "", "", "", "", ""]);
-      }
-      toast.success(res.message || `New OTP code sent to ${email}`);
+      setOtpDigits(["", "", "", "", "", ""]);
+      toast.success(res.message || `New OTP code sent to your email inbox: ${email}`);
 
       if (inputRefs[0]?.current) {
         inputRefs[0].current.focus();
@@ -316,33 +305,7 @@ export default function VerifyOtpPage() {
           </p>
         </div>
 
-        {/* Security OTP Code Banner */}
-        {demoOTP && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{
-              padding: "0.75rem 1rem",
-              borderRadius: "12px",
-              backgroundColor: "rgba(99, 102, 241, 0.15)",
-              border: "1px solid rgba(99, 102, 241, 0.35)",
-              color: "#818CF8",
-              fontSize: "0.825rem",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <ShieldCheck size={18} />
-              <span>Verification OTP Code:</span>
-            </div>
-            <span style={{ fontSize: "1.1rem", fontFamily: "monospace", letterSpacing: "0.1em", fontWeight: 800, color: "#F8FAFC" }}>
-              {demoOTP}
-            </span>
-          </motion.div>
-        )}
+
 
         {/* Error Alert */}
         {errorMsg && (

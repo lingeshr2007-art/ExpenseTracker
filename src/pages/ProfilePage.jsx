@@ -147,19 +147,20 @@ export default function ProfilePage() {
   };
 
   // Handle Logout - Completely wipe local data and hard reset to login page
-  const handleLogout = async (e) => {
+  const handleLogout = (e) => {
     if (e) {
       if (e.preventDefault) e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
     }
     try {
-      if (authLogout) await authLogout();
+      if (authLogout) authLogout();
       authService.logout();
       if (appContext && typeof appContext.logout === "function") {
         appContext.logout();
       }
       useStore.getState().clearStore();
-      localStorage.clear();
+      localStorage.removeItem("myfinpal_session_token");
+      localStorage.removeItem("myfinpal_active_user");
       sessionStorage.clear();
     } catch (err) {
       console.error("Logout error:", err);
@@ -251,13 +252,13 @@ export default function ProfilePage() {
               overflow: "hidden",
             }}
           >
-            {/* Top Cyan Accent Strip */}
+            {/* Top Accent Strip */}
             <div
               style={{
                 position: "absolute",
                 top: 0, left: 0, right: 0,
                 height: "4px",
-                background: "linear-gradient(90deg, #3EC3D5 0%, #4F5DED 100%)",
+                background: "linear-gradient(90deg, #2563EB 0%, #4F5DED 100%)",
               }}
             />
 
@@ -272,8 +273,8 @@ export default function ProfilePage() {
                     height: "100px",
                     borderRadius: "50%",
                     objectFit: "cover",
-                    border: "4px solid #3EC3D5",
-                    boxShadow: "0 8px 20px rgba(62, 195, 213, 0.25)",
+                    border: "4px solid #2563EB",
+                    boxShadow: "0 8px 20px rgba(37, 99, 235, 0.25)",
                   }}
                 />
               ) : (
@@ -283,14 +284,14 @@ export default function ProfilePage() {
                     height: "100px",
                     borderRadius: "50%",
                     background: "linear-gradient(135deg, #1A1A1E 0%, #23273C 100%)",
-                    color: "#3EC3D5",
+                    color: "#2563EB",
                     fontSize: "2rem",
                     fontWeight: 800,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    border: "4px solid #3EC3D5",
-                    boxShadow: "0 8px 20px rgba(62, 195, 213, 0.25)",
+                    border: "4px solid #2563EB",
+                    boxShadow: "0 8px 20px rgba(37, 99, 235, 0.25)",
                   }}
                 >
                   {getInitials(user.name)}

@@ -54,6 +54,10 @@ export const api = {
   // ── Auth ──
   signup: (name, email, password) => request("/auth/signup", { method: "POST", body: JSON.stringify({ name, email, password }) }),
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  googleAuth: (email, name, avatar) => request("/auth/google", { method: "POST", body: JSON.stringify({ email, name, avatar }) }),
+  sendOtp: (email) => request("/auth/send-otp", { method: "POST", body: JSON.stringify({ email }) }),
+  verifyOtp: (email, otpCode, otpSessionId) => request("/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, otpCode, otpSessionId }) }),
+  resendOtp: (email, otpSessionId) => request("/auth/resend-otp", { method: "POST", body: JSON.stringify({ email, otpSessionId }) }),
   sendLoginOtp: (email, password) => request("/auth/login-otp/send", { method: "POST", body: JSON.stringify({ email, password }) }),
   verifyLoginOtp: (email, otpSessionId, otpCode) => request("/auth/login-otp/verify", { method: "POST", body: JSON.stringify({ email, otpSessionId, otpCode }) }),
   resendLoginOtp: (email, otpSessionId) => request("/auth/login-otp/resend", { method: "POST", body: JSON.stringify({ email, otpSessionId }) }),

@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext.jsx";
-import GoogleAuthModal from "../components/GoogleAuthModal.jsx";
 
 const FEATURE_SLIDES = [
   {
@@ -69,9 +68,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [activeSlide, setActiveSlide] = useState(0);
-
-  // Google OAuth Modal state
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
 
   // Email Validator Helper
   const isValidEmail = (str) => {
@@ -146,7 +142,7 @@ export default function LoginPage() {
       const res = await sendOtp(cleanEmail);
       setIsLoading(false);
       toast.success(res.message || `Security OTP sent to ${cleanEmail}`);
-      navigate("/verify-otp", { state: { email: cleanEmail, otpCode: res?.otpCode } });
+      navigate("/verify-otp", { state: { email: cleanEmail } });
     } catch (err) {
       setIsLoading(false);
       const errMsg =
@@ -155,22 +151,6 @@ export default function LoginPage() {
         "Failed to send OTP. Please try again.";
       setAuthError(errMsg);
       toast.error(errMsg);
-    }
-  };
-
-  // Google Auth Success Handler (Direct Verified Email Login via Google)
-  const handleGoogleSuccess = async (googleUser) => {
-    setIsGoogleModalOpen(false);
-    setIsLoading(true);
-
-    try {
-      await loginWithGoogle(googleUser.email, googleUser.name);
-      setIsLoading(false);
-      toast.success(`Signed in with Google as ${googleUser.name} ✓ (Email Verified)`);
-      navigate("/dashboard");
-    } catch (err) {
-      setIsLoading(false);
-      toast.error("Google authentication failed. Please try again.");
     }
   };
 
@@ -750,13 +730,6 @@ export default function LoginPage() {
           </div>
         </div>
       </motion.div>
-
-      <GoogleAuthModal
-        isOpen={isGoogleModalOpen}
-        onClose={() => setIsGoogleModalOpen(false)}
-        onSuccess={handleGoogleSuccess}
-        onSelectAccount={handleGoogleSuccess}
-      />
     </div>
   );
 }

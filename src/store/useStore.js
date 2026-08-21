@@ -117,15 +117,15 @@ const useStore = create((set, get) => ({
 
       set((s) => {
         let cleanTxs = s.transactions;
-        if (txs.status === "fulfilled" && Array.isArray(txs.value)) {
+        if (txs.status === "fulfilled" && Array.isArray(txs.value) && txs.value.length > 0) {
           cleanTxs = txs.value.map(sanitizeTx).filter(Boolean);
         }
         const next = {
           transactions: cleanTxs,
-          budget: bRes.status === "fulfilled" && typeof bRes.value?.budget === "number" ? bRes.value.budget : s.budget,
-          savingsGoals: goals.status === "fulfilled" && Array.isArray(goals.value) ? goals.value : s.savingsGoals,
-          savingsHistory: history.status === "fulfilled" && Array.isArray(history.value) ? history.value : s.savingsHistory,
-          debts: debtsList.status === "fulfilled" && Array.isArray(debtsList.value) ? debtsList.value : s.debts,
+          budget: bRes.status === "fulfilled" && typeof bRes.value?.budget === "number" && bRes.value.budget > 0 ? bRes.value.budget : s.budget,
+          savingsGoals: goals.status === "fulfilled" && Array.isArray(goals.value) && goals.value.length > 0 ? goals.value : s.savingsGoals,
+          savingsHistory: history.status === "fulfilled" && Array.isArray(history.value) && history.value.length > 0 ? history.value : s.savingsHistory,
+          debts: debtsList.status === "fulfilled" && Array.isArray(debtsList.value) && debtsList.value.length > 0 ? debtsList.value : s.debts,
         };
         persist({ ...s, ...next });
         return next;

@@ -6,7 +6,7 @@ import { CategoryIcon } from "../utils/categoryIcons";
 import { FaCheck, FaArrowLeft, FaCircleExclamation, FaTriangleExclamation } from "react-icons/fa6";
 
 export default function AddTransaction() {
-  const { categories, addTransaction, showToast, getTotals, getMonthlyExpense, budget } = useStore();
+  const { categories, addTransaction, showToast, getTotals, getMonthlyExpense, budget, transactions = [] } = useStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -102,7 +102,7 @@ export default function AddTransaction() {
   const expenseCategories = categories.map((c) => c.name).filter((c) => !incomeCategories.includes(c) || c === "Other");
   const availableCategories = type === "income" ? incomeCategories : expenseCategories;
 
-  const storeTransactions = useStore((state) => state.transactions || []);
+  const storeTransactions = transactions || [];
   const recentTx = storeTransactions.slice(0, 4);
 
   return (

@@ -25,22 +25,41 @@ export function AuthProvider({ children }) {
   // Fetch Current Logged in User Profile (/api/auth/me)
   const fetchMe = async () => {
     const storedToken = localStorage.getItem(SESSION_TOKEN_KEY);
-    if (!storedToken) {
+    const storedUserRaw = localStorage.getItem(ACTIVE_USER_KEY);
+
+    if (!storedToken || !storedUserRaw) {
       setUser(null);
+      setToken(null);
       setIsLoading(false);
-      useStore.getState().clearStore();
       return;
     }
+
+    let localUser = null;
+    try {
+      localUser = JSON.parse(storedUserRaw);
+    } catch (e) {}
 
     try {
       const res = await axiosInstance.get("/auth/me");
       if (res.data && res.data.user) {
         setUser(res.data.user);
+        setToken(storedToken);
         localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(res.data.user));
         useStore.getState().resetForUser(res.data.user.id || res.data.user._id || res.data.user.email);
+      } else if (localUser) {
+        setUser(localUser);
+        setToken(storedToken);
+        useStore.getState().resetForUser(localUser.id || localUser._id || localUser.email);
       }
     } catch (err) {
-      logout();
+      // Offline/local fallback: Keep user logged in with stored credentials
+      if (err.response && err.response.status === 401) {
+        logout();
+      } else if (localUser) {
+        setUser(localUser);
+        setToken(storedToken);
+        useStore.getState().resetForUser(localUser.id || localUser._id || localUser.email);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -98,11 +117,10 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Logout
-  const logout = async () => {
-    try {
-      await axiosInstance.post("/auth/logout");
-    } catch (e) {}
+  // Instant non-blocking Logout
+  const logout = () => {
+    // Notify API in background without blocking local logout execution
+    axiosInstance.post("/auth/logout").catch(() => {});
     setUser(null);
     setToken(null);
     localStorage.removeItem(SESSION_TOKEN_KEY);
